@@ -156,7 +156,7 @@ function Index() {
                       <td className="p-3 text-foreground">{t.title}</td>
                       <td className="p-3">
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${urgencyColor(t.urgency)}`}>
-                          {t.urgency}
+                          {urgencyLabel[t.urgency] || t.urgency}
                         </span>
                       </td>
                       <td className="p-3">
