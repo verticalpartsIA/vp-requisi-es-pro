@@ -19,7 +19,6 @@ interface PendingReceipt {
   description: string;
   supplier: string;
   requester: string;
-  approvedValue: number;
   category: string;
   purchaseDate: string;
 }
@@ -31,7 +30,6 @@ const mockPending: PendingReceipt[] = [
     description: "Rolamentos SKF 6205",
     supplier: "SKF Brasil Ltda",
     requester: "Carlos Mendes",
-    approvedValue: 2450.0,
     category: "produto",
     purchaseDate: "2024-03-15",
   },
@@ -41,7 +39,6 @@ const mockPending: PendingReceipt[] = [
     description: "Chapas de aço 3mm (lote 50un)",
     supplier: "Aço Forte Distribuidora",
     requester: "Fernanda Lima",
-    approvedValue: 8900.0,
     category: "produto",
     purchaseDate: "2024-03-12",
   },
@@ -51,7 +48,6 @@ const mockPending: PendingReceipt[] = [
     description: "Parafusos M10x50 (caixa 500un)",
     supplier: "Fixadores Nacional",
     requester: "Roberto Alves",
-    approvedValue: 620.0,
     category: "produto",
     purchaseDate: "2024-03-18",
   },
@@ -186,7 +182,6 @@ function ReceiptPage() {
                   <div className="flex items-center gap-4 text-xs text-muted-foreground">
                     <span className="flex items-center gap-1"><Building2 className="h-3 w-3" />{item.supplier}</span>
                     <span className="flex items-center gap-1"><User className="h-3 w-3" />{item.requester}</span>
-                    <span>R$ {item.approvedValue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
                   </div>
                 </div>
                 <Button variant="vp" size="sm" onClick={() => openReceiptForm(item)}>
@@ -218,12 +213,6 @@ function ReceiptPage() {
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Fornecedor</span>
                 <span className="font-medium">{selectedItem?.supplier}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Valor Aprovado</span>
-                <span className="font-medium">
-                  R$ {selectedItem?.approvedValue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                </span>
               </div>
             </div>
 
