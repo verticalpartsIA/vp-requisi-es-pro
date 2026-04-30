@@ -51,6 +51,13 @@ const recentTickets = [
   { id: "M3-000018", module: "M3", title: "Consultoria ERP Financeiro", urgency: "LOW", status: "COTAÇÃO", date: "22/04" },
 ];
 
+const urgencyLabel: Record<string, string> = {
+  URGENT: "Urgente",
+  HIGH: "Alta",
+  MEDIUM: "Média",
+  LOW: "Baixa",
+};
+
 function urgencyColor(u: string) {
   if (u === "URGENT") return "bg-red-100 text-red-700 border-red-200";
   if (u === "HIGH") return "bg-orange-100 text-orange-700 border-orange-200";
@@ -149,7 +156,7 @@ function Index() {
                       <td className="p-3 text-foreground">{t.title}</td>
                       <td className="p-3">
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${urgencyColor(t.urgency)}`}>
-                          {t.urgency}
+                          {urgencyLabel[t.urgency] || t.urgency}
                         </span>
                       </td>
                       <td className="p-3">
