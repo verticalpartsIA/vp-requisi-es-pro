@@ -1,7 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Wrench, Plus } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { TicketsTable, type TicketRow } from "@/components/tickets-table";
+
+const sampleTickets: TicketRow[] = [
+  { id: "M3-000018", title: "Consultoria ERP Financeiro", requester: "Roberto Alves", urgency: "LOW", status: "COTAÇÃO", date: "22/04" },
+  { id: "M3-000017", title: "Manutenção Ar Condicionado", requester: "Lucia Ramos", urgency: "MEDIUM", status: "COMPRA", date: "20/04" },
+  { id: "M3-000016", title: "Auditoria ISO 9001", requester: "Paulo Souza", urgency: "HIGH", status: "APROVAÇÃO", date: "18/04" },
+  { id: "M3-000015", title: "Limpeza Industrial Anual", requester: "Marcos Reis", urgency: "MEDIUM", status: "CONCLUÍDO", date: "15/04" },
+];
 
 export const Route = createFileRoute("/services")({
   component: ServicesPage,
@@ -22,12 +29,11 @@ function ServicesPage() {
         </div>
         <Button variant="vp"><Plus className="h-4 w-4 mr-2" />Nova Requisição</Button>
       </div>
-      <Card className="card-hover-yellow">
-        <CardContent className="p-12 text-center">
-          <Wrench className="h-12 w-12 mx-auto text-muted-foreground/40 mb-4" />
-          <p className="text-muted-foreground">Nenhuma requisição de serviço ainda.</p>
-        </CardContent>
-      </Card>
+      <TicketsTable
+        tickets={sampleTickets}
+        emptyIcon={<Wrench className="h-12 w-12 mx-auto text-muted-foreground/40 mb-4" />}
+        emptyMessage="Nenhuma requisição de serviço ainda."
+      />
     </div>
   );
 }

@@ -1,7 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { HardHat, Plus } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { TicketsTable, type TicketRow } from "@/components/tickets-table";
+
+const sampleTickets: TicketRow[] = [
+  { id: "M4-000031", title: "Prensa Hidráulica — Vazamento", requester: "Carlos Mota", urgency: "URGENT", status: "ABERTO", date: "25/04" },
+  { id: "M4-000030", title: "Esteira Transportadora — Rolamento", requester: "André Lopes", urgency: "HIGH", status: "COTAÇÃO", date: "24/04" },
+  { id: "M4-000029", title: "Compressor Ar — Preventiva", requester: "Rita Gomes", urgency: "MEDIUM", status: "COMPRA", date: "22/04" },
+  { id: "M4-000028", title: "CNC Torno — Troca Ferramenta", requester: "Felipe Dias", urgency: "HIGH", status: "RECEBIMENTO", date: "20/04" },
+  { id: "M4-000027", title: "Ponte Rolante — Inspeção NR-11", requester: "Jorge Nunes", urgency: "LOW", status: "CONCLUÍDO", date: "18/04" },
+];
 
 export const Route = createFileRoute("/maintenance")({
   component: MaintenancePage,
@@ -22,12 +30,11 @@ function MaintenancePage() {
         </div>
         <Button variant="vp"><Plus className="h-4 w-4 mr-2" />Nova Requisição</Button>
       </div>
-      <Card className="card-hover-yellow">
-        <CardContent className="p-12 text-center">
-          <HardHat className="h-12 w-12 mx-auto text-muted-foreground/40 mb-4" />
-          <p className="text-muted-foreground">Nenhuma requisição de manutenção ainda.</p>
-        </CardContent>
-      </Card>
+      <TicketsTable
+        tickets={sampleTickets}
+        emptyIcon={<HardHat className="h-12 w-12 mx-auto text-muted-foreground/40 mb-4" />}
+        emptyMessage="Nenhuma requisição de manutenção ainda."
+      />
     </div>
   );
 }
