@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { FileSearch } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/quoting")({
   component: QuotingPage,
@@ -46,9 +47,9 @@ function QuotingPage() {
                 <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${urgBadge(t.urgency)}`}>
                   {t.urgency}
                 </span>
-                <button className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition-colors">
+                <Button variant="vp" size="sm">
                   Cotar
-                </button>
+                </Button>
               </div>
             </CardContent>
           </Card>
