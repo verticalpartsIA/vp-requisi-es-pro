@@ -1,7 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Key, Plus } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { TicketsTable, type TicketRow } from "@/components/tickets-table";
+
+const sampleTickets: TicketRow[] = [
+  { id: "M6-000012", title: "Guindaste 20t — Linha Produção", requester: "Pedro Santos", urgency: "HIGH", status: "APROVAÇÃO", date: "26/04" },
+];
 
 export const Route = createFileRoute("/rental")({
   component: RentalPage,
@@ -22,12 +26,11 @@ function RentalPage() {
         </div>
         <Button variant="vp"><Plus className="h-4 w-4 mr-2" />Nova Requisição</Button>
       </div>
-      <Card className="card-hover-yellow">
-        <CardContent className="p-12 text-center">
-          <Key className="h-12 w-12 mx-auto text-muted-foreground/40 mb-4" />
-          <p className="text-muted-foreground">Nenhuma requisição de locação ainda.</p>
-        </CardContent>
-      </Card>
+      <TicketsTable
+        tickets={sampleTickets}
+        emptyIcon={<Key className="h-12 w-12 mx-auto text-muted-foreground/40 mb-4" />}
+        emptyMessage="Nenhuma requisição de locação ainda."
+      />
     </div>
   );
 }

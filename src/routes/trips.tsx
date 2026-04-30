@@ -1,7 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Plane, Plus } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { TicketsTable, type TicketRow } from "@/components/tickets-table";
+
+const sampleTickets: TicketRow[] = [
+  { id: "M2-000042", title: "Viagem SP — Cliente ABC Ltda", requester: "João Silva", urgency: "HIGH", status: "APROVAÇÃO", date: "27/04" },
+  { id: "M2-000041", title: "Treinamento RJ — NR-12", requester: "Ana Costa", urgency: "MEDIUM", status: "COTAÇÃO", date: "25/04" },
+  { id: "M2-000040", title: "Feira Industrial Hannover", requester: "Carlos Lima", urgency: "LOW", status: "ABERTO", date: "23/04" },
+];
 
 export const Route = createFileRoute("/trips")({
   head: () => ({
@@ -27,12 +33,11 @@ function TripsPage() {
         </div>
         <Button variant="vp"><Plus className="h-4 w-4 mr-2" />Nova Requisição</Button>
       </div>
-      <Card className="card-hover-yellow">
-        <CardContent className="p-12 text-center">
-          <Plane className="h-12 w-12 mx-auto text-muted-foreground/40 mb-4" />
-          <p className="text-muted-foreground">Nenhuma requisição de viagem ainda.</p>
-        </CardContent>
-      </Card>
+      <TicketsTable
+        tickets={sampleTickets}
+        emptyIcon={<Plane className="h-12 w-12 mx-auto text-muted-foreground/40 mb-4" />}
+        emptyMessage="Nenhuma requisição de viagem ainda."
+      />
     </div>
   );
 }

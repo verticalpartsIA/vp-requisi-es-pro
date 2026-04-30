@@ -1,7 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Truck, Plus } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { TicketsTable, type TicketRow } from "@/components/tickets-table";
+
+const sampleTickets: TicketRow[] = [
+  { id: "M5-000028", title: "Frete Chapas Aço SP→CWB", requester: "Maria Costa", urgency: "MEDIUM", status: "COMPRA", date: "24/04" },
+  { id: "M5-000027", title: "Transporte Equipamento RJ→SP", requester: "João Lima", urgency: "HIGH", status: "COTAÇÃO", date: "22/04" },
+];
 
 export const Route = createFileRoute("/freight")({
   component: FreightPage,
@@ -22,12 +27,11 @@ function FreightPage() {
         </div>
         <Button variant="vp"><Plus className="h-4 w-4 mr-2" />Nova Requisição</Button>
       </div>
-      <Card className="card-hover-yellow">
-        <CardContent className="p-12 text-center">
-          <Truck className="h-12 w-12 mx-auto text-muted-foreground/40 mb-4" />
-          <p className="text-muted-foreground">Nenhuma requisição de frete ainda.</p>
-        </CardContent>
-      </Card>
+      <TicketsTable
+        tickets={sampleTickets}
+        emptyIcon={<Truck className="h-12 w-12 mx-auto text-muted-foreground/40 mb-4" />}
+        emptyMessage="Nenhuma requisição de frete ainda."
+      />
     </div>
   );
 }
