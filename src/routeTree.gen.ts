@@ -9,8 +9,80 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TripsRouteImport } from './routes/trips'
+import { Route as ServicesRouteImport } from './routes/services'
+import { Route as RentalRouteImport } from './routes/rental'
+import { Route as ReceiptRouteImport } from './routes/receipt'
+import { Route as QuotingRouteImport } from './routes/quoting'
+import { Route as PurchasingRouteImport } from './routes/purchasing'
+import { Route as ProductsRouteImport } from './routes/products'
+import { Route as MaintenanceRouteImport } from './routes/maintenance'
+import { Route as LogsRouteImport } from './routes/logs'
+import { Route as FreightRouteImport } from './routes/freight'
+import { Route as ApprovalRouteImport } from './routes/approval'
+import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as IndexRouteImport } from './routes/index'
 
+const TripsRoute = TripsRouteImport.update({
+  id: '/trips',
+  path: '/trips',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ServicesRoute = ServicesRouteImport.update({
+  id: '/services',
+  path: '/services',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RentalRoute = RentalRouteImport.update({
+  id: '/rental',
+  path: '/rental',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReceiptRoute = ReceiptRouteImport.update({
+  id: '/receipt',
+  path: '/receipt',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const QuotingRoute = QuotingRouteImport.update({
+  id: '/quoting',
+  path: '/quoting',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PurchasingRoute = PurchasingRouteImport.update({
+  id: '/purchasing',
+  path: '/purchasing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProductsRoute = ProductsRouteImport.update({
+  id: '/products',
+  path: '/products',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MaintenanceRoute = MaintenanceRouteImport.update({
+  id: '/maintenance',
+  path: '/maintenance',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LogsRoute = LogsRouteImport.update({
+  id: '/logs',
+  path: '/logs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FreightRoute = FreightRouteImport.update({
+  id: '/freight',
+  path: '/freight',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApprovalRoute = ApprovalRouteImport.update({
+  id: '/approval',
+  path: '/approval',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AnalyticsRoute = AnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -19,28 +91,200 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/analytics': typeof AnalyticsRoute
+  '/approval': typeof ApprovalRoute
+  '/freight': typeof FreightRoute
+  '/logs': typeof LogsRoute
+  '/maintenance': typeof MaintenanceRoute
+  '/products': typeof ProductsRoute
+  '/purchasing': typeof PurchasingRoute
+  '/quoting': typeof QuotingRoute
+  '/receipt': typeof ReceiptRoute
+  '/rental': typeof RentalRoute
+  '/services': typeof ServicesRoute
+  '/trips': typeof TripsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/analytics': typeof AnalyticsRoute
+  '/approval': typeof ApprovalRoute
+  '/freight': typeof FreightRoute
+  '/logs': typeof LogsRoute
+  '/maintenance': typeof MaintenanceRoute
+  '/products': typeof ProductsRoute
+  '/purchasing': typeof PurchasingRoute
+  '/quoting': typeof QuotingRoute
+  '/receipt': typeof ReceiptRoute
+  '/rental': typeof RentalRoute
+  '/services': typeof ServicesRoute
+  '/trips': typeof TripsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/analytics': typeof AnalyticsRoute
+  '/approval': typeof ApprovalRoute
+  '/freight': typeof FreightRoute
+  '/logs': typeof LogsRoute
+  '/maintenance': typeof MaintenanceRoute
+  '/products': typeof ProductsRoute
+  '/purchasing': typeof PurchasingRoute
+  '/quoting': typeof QuotingRoute
+  '/receipt': typeof ReceiptRoute
+  '/rental': typeof RentalRoute
+  '/services': typeof ServicesRoute
+  '/trips': typeof TripsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/analytics'
+    | '/approval'
+    | '/freight'
+    | '/logs'
+    | '/maintenance'
+    | '/products'
+    | '/purchasing'
+    | '/quoting'
+    | '/receipt'
+    | '/rental'
+    | '/services'
+    | '/trips'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/analytics'
+    | '/approval'
+    | '/freight'
+    | '/logs'
+    | '/maintenance'
+    | '/products'
+    | '/purchasing'
+    | '/quoting'
+    | '/receipt'
+    | '/rental'
+    | '/services'
+    | '/trips'
+  id:
+    | '__root__'
+    | '/'
+    | '/analytics'
+    | '/approval'
+    | '/freight'
+    | '/logs'
+    | '/maintenance'
+    | '/products'
+    | '/purchasing'
+    | '/quoting'
+    | '/receipt'
+    | '/rental'
+    | '/services'
+    | '/trips'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AnalyticsRoute: typeof AnalyticsRoute
+  ApprovalRoute: typeof ApprovalRoute
+  FreightRoute: typeof FreightRoute
+  LogsRoute: typeof LogsRoute
+  MaintenanceRoute: typeof MaintenanceRoute
+  ProductsRoute: typeof ProductsRoute
+  PurchasingRoute: typeof PurchasingRoute
+  QuotingRoute: typeof QuotingRoute
+  ReceiptRoute: typeof ReceiptRoute
+  RentalRoute: typeof RentalRoute
+  ServicesRoute: typeof ServicesRoute
+  TripsRoute: typeof TripsRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/trips': {
+      id: '/trips'
+      path: '/trips'
+      fullPath: '/trips'
+      preLoaderRoute: typeof TripsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/services': {
+      id: '/services'
+      path: '/services'
+      fullPath: '/services'
+      preLoaderRoute: typeof ServicesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/rental': {
+      id: '/rental'
+      path: '/rental'
+      fullPath: '/rental'
+      preLoaderRoute: typeof RentalRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/receipt': {
+      id: '/receipt'
+      path: '/receipt'
+      fullPath: '/receipt'
+      preLoaderRoute: typeof ReceiptRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/quoting': {
+      id: '/quoting'
+      path: '/quoting'
+      fullPath: '/quoting'
+      preLoaderRoute: typeof QuotingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/purchasing': {
+      id: '/purchasing'
+      path: '/purchasing'
+      fullPath: '/purchasing'
+      preLoaderRoute: typeof PurchasingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/products': {
+      id: '/products'
+      path: '/products'
+      fullPath: '/products'
+      preLoaderRoute: typeof ProductsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/maintenance': {
+      id: '/maintenance'
+      path: '/maintenance'
+      fullPath: '/maintenance'
+      preLoaderRoute: typeof MaintenanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/logs': {
+      id: '/logs'
+      path: '/logs'
+      fullPath: '/logs'
+      preLoaderRoute: typeof LogsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/freight': {
+      id: '/freight'
+      path: '/freight'
+      fullPath: '/freight'
+      preLoaderRoute: typeof FreightRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/approval': {
+      id: '/approval'
+      path: '/approval'
+      fullPath: '/approval'
+      preLoaderRoute: typeof ApprovalRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/analytics': {
+      id: '/analytics'
+      path: '/analytics'
+      fullPath: '/analytics'
+      preLoaderRoute: typeof AnalyticsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -53,6 +297,18 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AnalyticsRoute: AnalyticsRoute,
+  ApprovalRoute: ApprovalRoute,
+  FreightRoute: FreightRoute,
+  LogsRoute: LogsRoute,
+  MaintenanceRoute: MaintenanceRoute,
+  ProductsRoute: ProductsRoute,
+  PurchasingRoute: PurchasingRoute,
+  QuotingRoute: QuotingRoute,
+  ReceiptRoute: ReceiptRoute,
+  RentalRoute: RentalRoute,
+  ServicesRoute: ServicesRoute,
+  TripsRoute: TripsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
