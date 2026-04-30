@@ -14,6 +14,13 @@ const queue = [
   { id: "M3-000018", title: "Consultoria ERP Financeiro", urgency: "LOW", value: "R$ 50.000", deadline: "15/05", module: "M3" },
 ];
 
+const urgLabel: Record<string, string> = {
+  HIGH: "Alta",
+  MEDIUM: "Média",
+  LOW: "Baixa",
+  URGENT: "Urgente",
+};
+
 function urgBadge(u: string) {
   if (u === "HIGH") return "bg-orange-100 text-orange-700 border-orange-200";
   if (u === "MEDIUM") return "bg-yellow-100 text-yellow-700 border-yellow-200";
@@ -45,7 +52,7 @@ function QuotingPage() {
               </div>
               <div className="flex items-center gap-2">
                 <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${urgBadge(t.urgency)}`}>
-                  {t.urgency}
+                  {urgLabel[t.urgency] || t.urgency}
                 </span>
                 <Button variant="vp" size="sm">
                   Cotar
