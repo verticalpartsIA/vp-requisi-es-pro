@@ -26,7 +26,7 @@ function ProductsPage() {
             <p className="text-sm text-muted-foreground">Materiais, insumos e equipamentos</p>
           </div>
         </div>
-        <Button>
+        <Button variant="vp">
           <Plus className="h-4 w-4 mr-2" />
           Nova Requisição
         </Button>

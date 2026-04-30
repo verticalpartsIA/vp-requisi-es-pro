@@ -25,7 +25,7 @@ function TripsPage() {
             <p className="text-sm text-muted-foreground">Passagens, hotel e despesas</p>
           </div>
         </div>
-        <Button><Plus className="h-4 w-4 mr-2" />Nova Requisição</Button>
+        <Button variant="vp"><Plus className="h-4 w-4 mr-2" />Nova Requisição</Button>
       </div>
       <Card className="card-hover-yellow">
         <CardContent className="p-12 text-center">
