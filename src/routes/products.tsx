@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import {
-  Package, Plus, ChevronRight, ChevronLeft, FileText, Truck, DollarSign,
-  Users, Link2, X, Upload, CalendarIcon,
+  Package, Plus, ChevronRight, ChevronLeft, FileText, Truck,
+  Link2, X, CalendarIcon,
 } from "lucide-react";
 import { format, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -10,17 +10,11 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
 import { TicketsTable, type TicketRow } from "@/components/tickets-table";
 import { toast } from "sonner";
 
@@ -32,15 +26,6 @@ const sampleTickets: TicketRow[] = [
   { id: "M1-000061", title: "Rolamento 6205 ZZ", requester: "Pedro Santos", urgency: "MEDIUM", status: "COMPRA", date: "22/04" },
 ];
 
-const CATEGORIES = [
-  { value: "MATERIAL", label: "Material" },
-  { value: "EQUIPMENT", label: "Equipamento" },
-  { value: "SUPPLY", label: "Insumo" },
-  { value: "SERVICE", label: "Serviço" },
-];
-
-const UNITS = ["UN", "KG", "L", "M", "CX", "PCT", "PAR", "JG", "RL", "SC"];
-
 const URGENCY = [
   { value: "LOW", label: "Baixa" },
   { value: "MEDIUM", label: "Média" },
@@ -48,19 +33,10 @@ const URGENCY = [
   { value: "URGENT", label: "Urgente" },
 ];
 
-const BUDGET = [
-  { value: "CAPEX", label: "CAPEX" },
-  { value: "OPEX", label: "OPEX" },
-  { value: "MAINTENANCE", label: "Manutenção" },
-  { value: "EMERGENCY", label: "Emergencial" },
-];
-
 const STEPS = [
   { label: "Produto", icon: Package },
   { label: "Técnico", icon: FileText },
   { label: "Logística", icon: Truck },
-  { label: "Orçamento", icon: DollarSign },
-  { label: "Fornecedor", icon: Users },
 ];
 
 export const Route = createFileRoute("/products")({
@@ -80,10 +56,7 @@ function ProductsPage() {
   // Step 1 — Product
   const [productName, setProductName] = useState("");
   const [description, setDescription] = useState("");
-  const [category, setCategory] = useState("");
   const [quantity, setQuantity] = useState("");
-  const [unit, setUnit] = useState("");
-  const [estimatedUnitCost, setEstimatedUnitCost] = useState("");
 
   // Step 2 — Technical
   const [technicalSpecs, setTechnicalSpecs] = useState("");
@@ -98,51 +71,26 @@ function ProductsPage() {
   const [urgencyLevel, setUrgencyLevel] = useState("");
   const [justification, setJustification] = useState("");
 
-  // Step 4 — Budget
-  const [costCenterCode, setCostCenterCode] = useState("");
-  const [projectCode, setProjectCode] = useState("");
-  const [budgetAllocation, setBudgetAllocation] = useState("");
-
-  // Step 5 — Supplier
-  const [preferredSupplier, setPreferredSupplier] = useState("");
-  const [supplierContact, setSupplierContact] = useState("");
-  const [existingContract, setExistingContract] = useState(false);
-
-  const totalEstimated = (() => {
-    const q = parseFloat(quantity);
-    const u = parseFloat(estimatedUnitCost);
-    if (!isNaN(q) && !isNaN(u)) return q * u;
-    return 0;
-  })();
-
   const resetForm = () => {
     setStep(0);
-    setProductName(""); setDescription(""); setCategory(""); setQuantity("");
-    setUnit(""); setEstimatedUnitCost(""); setTechnicalSpecs(""); setBrandPreference("");
+    setProductName(""); setDescription(""); setQuantity("");
+    setTechnicalSpecs(""); setBrandPreference("");
     setModelReference(""); setReferenceLinks([""]); setOnlinePurchaseSuggestion("");
     setDeliveryDeadline(undefined); setDeliveryLocation(""); setUrgencyLevel("");
-    setJustification(""); setCostCenterCode(""); setProjectCode("");
-    setBudgetAllocation(""); setPreferredSupplier(""); setSupplierContact("");
-    setExistingContract(false);
+    setJustification("");
   };
 
   const validateStep = (): boolean => {
     if (step === 0) {
       if (productName.length < 5) { toast.error("Nome do produto deve ter pelo menos 5 caracteres."); return false; }
       if (description.length < 20) { toast.error("Descrição deve ter pelo menos 20 caracteres."); return false; }
-      if (!category) { toast.error("Selecione uma categoria."); return false; }
       if (!quantity || parseFloat(quantity) <= 0) { toast.error("Quantidade deve ser maior que 0."); return false; }
-      if (!unit) { toast.error("Selecione a unidade de medida."); return false; }
     }
     if (step === 2) {
       if (!deliveryDeadline) { toast.error("Informe a data limite para entrega."); return false; }
       if (!deliveryLocation.trim()) { toast.error("Informe o local de entrega."); return false; }
       if (!urgencyLevel) { toast.error("Selecione o nível de urgência."); return false; }
       if (justification.length < 10) { toast.error("Justificativa deve ter pelo menos 10 caracteres."); return false; }
-    }
-    if (step === 3) {
-      if (!costCenterCode.trim()) { toast.error("Informe o centro de custo."); return false; }
-      if (!budgetAllocation) { toast.error("Selecione a alocação orçamentária."); return false; }
     }
     return true;
   };
@@ -154,7 +102,7 @@ function ProductsPage() {
 
   const handleSubmit = () => {
     toast.success("Requisição criada com sucesso!", {
-      description: `${productName} — ${parseFloat(quantity)} ${unit}`,
+      description: `${productName} — ${parseFloat(quantity)} un`,
     });
     setDialogOpen(false);
     resetForm();
@@ -249,39 +197,9 @@ function ProductsPage() {
                 <Textarea placeholder="Descreva o material, aplicação e contexto de uso..." value={description} onChange={(e) => setDescription(e.target.value)} rows={3} maxLength={1000} />
                 <p className="text-[11px] text-muted-foreground">{description.length}/1000</p>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Categoria *</label>
-                  <Select value={category} onValueChange={setCategory}>
-                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>
-                      {CATEGORIES.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Unidade *</label>
-                  <Select value={unit} onValueChange={setUnit}>
-                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>
-                      {UNITS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Quantidade *</label>
-                  <Input type="number" min="0" step="0.01" placeholder="0" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Preço Unit. Estimado (R$)</label>
-                  <Input type="number" min="0" step="0.01" placeholder="0,00" value={estimatedUnitCost} onChange={(e) => setEstimatedUnitCost(e.target.value)} />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Total Estimado (R$)</label>
-                  <Input readOnly value={totalEstimated > 0 ? totalEstimated.toLocaleString("pt-BR", { minimumFractionDigits: 2 }) : "—"} className="bg-muted/50" />
-                </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Quantidade *</label>
+                <Input type="number" min="0" step="0.01" placeholder="0" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
               </div>
             </div>
           )}
@@ -389,80 +307,6 @@ function ProductsPage() {
                 <label className="text-sm font-medium">Justificativa da Compra *</label>
                 <Textarea placeholder="Por que é necessário? Qual o impacto se não for comprado?" value={justification} onChange={(e) => setJustification(e.target.value)} rows={3} maxLength={500} />
                 <p className="text-[11px] text-muted-foreground">{justification.length}/500</p>
-              </div>
-            </div>
-          )}
-
-          {/* ---------- Step 3: Orçamento ---------- */}
-          {step === 3 && (
-            <div className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Código do Centro de Custo *</label>
-                <Input placeholder="Ex.: CC-4200" value={costCenterCode} onChange={(e) => setCostCenterCode(e.target.value)} />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Código do Projeto (opcional)</label>
-                <Input placeholder="Ex.: PRJ-2024-018" value={projectCode} onChange={(e) => setProjectCode(e.target.value)} />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Alocação Orçamentária *</label>
-                <Select value={budgetAllocation} onValueChange={setBudgetAllocation}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>
-                    {BUDGET.map((b) => <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              {totalEstimated > 0 && (
-                <div className="rounded-lg bg-muted/50 p-4 space-y-1">
-                  <p className="text-xs text-muted-foreground">Resumo Financeiro</p>
-                  <p className="text-lg font-bold">R$ {totalEstimated.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
-                  <p className="text-xs text-muted-foreground">{quantity} {unit} × R$ {parseFloat(estimatedUnitCost).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ---------- Step 4: Fornecedor ---------- */}
-          {step === 4 && (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">Campos opcionais — preencha se já tiver um fornecedor em mente.</p>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Fornecedor Sugerido (opcional)</label>
-                <Input placeholder="Nome do fornecedor" value={preferredSupplier} onChange={(e) => setPreferredSupplier(e.target.value)} />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Contato do Fornecedor</label>
-                <Input placeholder="Telefone, email ou nome do contato" value={supplierContact} onChange={(e) => setSupplierContact(e.target.value)} />
-              </div>
-              <div className="flex items-center gap-2">
-                <Checkbox id="existing-contract" checked={existingContract} onCheckedChange={(v) => setExistingContract(v === true)} />
-                <label htmlFor="existing-contract" className="text-sm">Possui contrato vigente com este fornecedor?</label>
-              </div>
-
-              {/* Review summary */}
-              <div className="rounded-lg border-2 border-vp-yellow bg-amber-50/50 p-4 space-y-2 mt-4">
-                <p className="text-xs font-semibold text-vp-yellow-dark">Resumo da Requisição</p>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                  <span className="text-muted-foreground">Produto</span>
-                  <span className="font-medium">{productName}</span>
-                  <span className="text-muted-foreground">Categoria</span>
-                  <span className="font-medium">{CATEGORIES.find((c) => c.value === category)?.label}</span>
-                  <span className="text-muted-foreground">Qtd</span>
-                  <span className="font-medium">{quantity} {unit}</span>
-                  {totalEstimated > 0 && (
-                    <>
-                      <span className="text-muted-foreground">Valor Estimado</span>
-                      <span className="font-medium">R$ {totalEstimated.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                    </>
-                  )}
-                  <span className="text-muted-foreground">Urgência</span>
-                  <span className="font-medium">{URGENCY.find((u) => u.value === urgencyLevel)?.label}</span>
-                  <span className="text-muted-foreground">Entrega até</span>
-                  <span className="font-medium">{deliveryDeadline ? format(deliveryDeadline, "dd/MM/yyyy") : "—"}</span>
-                  <span className="text-muted-foreground">Centro de Custo</span>
-                  <span className="font-medium">{costCenterCode}</span>
-                </div>
               </div>
             </div>
           )}
