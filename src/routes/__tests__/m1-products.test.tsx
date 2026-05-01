@@ -378,7 +378,8 @@ describe("M1 - Product Requisitions", () => {
       await goToStep3();
 
       // Try to submit without filling required fields
-      await user.click(screen.getByText("Enviar Requisição"));
+      const dialog = screen.getByRole("dialog");
+      await user.click(within(dialog).getByText("Enviar Requisição"));
 
       // Should show one of the validation errors
       expect(toast.error).toHaveBeenCalled();
@@ -387,10 +388,11 @@ describe("M1 - Product Requisitions", () => {
     it("should show urgency level options: Baixa, Média, Alta, Urgente", async () => {
       await goToStep3();
 
-      expect(screen.getByText("Baixa")).toBeInTheDocument();
-      expect(screen.getByText("Média")).toBeInTheDocument();
-      expect(screen.getByText("Alta")).toBeInTheDocument();
-      expect(screen.getByText("Urgente")).toBeInTheDocument();
+      const dialog = screen.getByRole("dialog");
+      expect(within(dialog).getByText("Baixa")).toBeInTheDocument();
+      expect(within(dialog).getByText("Média")).toBeInTheDocument();
+      expect(within(dialog).getByText("Alta")).toBeInTheDocument();
+      expect(within(dialog).getByText("Urgente")).toBeInTheDocument();
     });
 
     it("should allow selecting urgency level", async () => {
@@ -423,7 +425,7 @@ describe("M1 - Product Requisitions", () => {
       await user.type(justInput, "Curta");
 
       // We can't easily set the date picker in jsdom, but we can verify validation triggers
-      await user.click(screen.getByText("Enviar Requisição"));
+      await user.click(within(dialog).getByText("Enviar Requisição"));
 
       // Should fail on date validation first
       expect(toast.error).toHaveBeenCalledWith(
