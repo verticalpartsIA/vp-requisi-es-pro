@@ -22,6 +22,7 @@ import {
   Zap,
   RotateCcw,
 } from "lucide-react";
+import { Download, FileText, FileSpreadsheet, Image, GitCompareArrows, Filter, ChevronRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -32,6 +33,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ChartContainer,
   ChartTooltip,
@@ -219,6 +229,11 @@ function SLAGauge({ value }: { value: number }) {
 
 function AnalyticsPage() {
   const [period, setPeriod] = useState("12m");
+  const [moduleFilter, setModuleFilter] = useState("Todos");
+  const [compareMode, setCompareMode] = useState<"none" | "previous_period" | "same_period_last_year">("none");
+  const [highlightModule, setHighlightModule] = useState<string | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [drillPath, setDrillPath] = useState<string[]>([]);
 
   const totalTickets = 1714;
   const avgCycleHours = 156;
@@ -226,9 +241,10 @@ function AnalyticsPage() {
   const approvalRate = 94.2;
 
   return (
+    <>
     <div className="max-w-6xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent">
             <BarChart3 className="h-5 w-5 text-vp-yellow-dark" />
@@ -240,18 +256,89 @@ function AnalyticsPage() {
             </p>
           </div>
         </div>
-        <Select value={period} onValueChange={setPeriod}>
-          <SelectTrigger className="w-[140px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="30d">Últimos 30 dias</SelectItem>
-            <SelectItem value="3m">Últimos 3 meses</SelectItem>
-            <SelectItem value="6m">Últimos 6 meses</SelectItem>
-            <SelectItem value="12m">Últimos 12 meses</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Module filter */}
+          <Select value={moduleFilter} onValueChange={setModuleFilter}>
+            <SelectTrigger className="w-[120px]">
+              <Filter className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {["Todos", "M1", "M2", "M3", "M4", "M5", "M6"].map((m) => (
+                <SelectItem key={m} value={m}>{m === "Todos" ? "Todos Módulos" : m}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {/* Period */}
+          <Select value={period} onValueChange={setPeriod}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="30d">Últimos 30 dias</SelectItem>
+              <SelectItem value="3m">Últimos 3 meses</SelectItem>
+              <SelectItem value="6m">Últimos 6 meses</SelectItem>
+              <SelectItem value="12m">Últimos 12 meses</SelectItem>
+            </SelectContent>
+          </Select>
+          {/* Time comparison */}
+          <Select value={compareMode} onValueChange={(v) => setCompareMode(v as typeof compareMode)}>
+            <SelectTrigger className="w-[160px]">
+              <GitCompareArrows className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+              <SelectValue placeholder="Comparar" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Sem comparação</SelectItem>
+              <SelectItem value="previous_period">Período anterior</SelectItem>
+              <SelectItem value="same_period_last_year">Mesmo período ano anterior</SelectItem>
+            </SelectContent>
+          </Select>
+          {/* Export */}
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setExportOpen(true)}>
+            <Download className="h-4 w-4" />
+            <span className="hidden sm:inline">Exportar</span>
+          </Button>
+        </div>
       </div>
+
+      {/* Drill-down breadcrumb */}
+      {drillPath.length > 0 && (
+        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+          <button className="hover:text-foreground transition-colors" onClick={() => setDrillPath([])}>
+            Dashboard
+          </button>
+          {drillPath.map((p, i) => (
+            <span key={p} className="flex items-center gap-1">
+              <ChevronRight className="h-3 w-3" />
+              <button
+                className="hover:text-foreground transition-colors"
+                onClick={() => setDrillPath(drillPath.slice(0, i + 1))}
+              >
+                {p}
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Comparison banner */}
+      {compareMode !== "none" && (
+        <Card className="border-dashed border-[var(--vp-yellow)]">
+          <CardContent className="p-3 flex items-center gap-3">
+            <GitCompareArrows className="h-4 w-4 text-vp-yellow-dark shrink-0" />
+            <p className="text-xs text-muted-foreground">
+              Comparando com{" "}
+              <span className="font-medium text-foreground">
+                {compareMode === "previous_period" ? "período anterior" : "mesmo período do ano anterior"}
+              </span>
+              {" · "}Variações exibidas em valores absolutos e percentuais.
+            </p>
+            <button className="ml-auto text-xs text-muted-foreground hover:text-foreground" onClick={() => setCompareMode("none")}>
+              Remover
+            </button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* KPI Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -593,5 +680,47 @@ function AnalyticsPage() {
         </Card>
       </div>
     </div>
+
+    {/* Export Dialog */}
+    <Dialog open={exportOpen} onOpenChange={setExportOpen}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Download className="h-5 w-5" />
+            Exportar Dashboard
+          </DialogTitle>
+          <DialogDescription>
+            Selecione o formato de exportação
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-3 mt-2">
+          {[
+            { label: "PDF", desc: "Relatório completo com gráficos", icon: FileText },
+            { label: "Excel", desc: "Dados brutos + tabelas dinâmicas", icon: FileSpreadsheet },
+            { label: "CSV", desc: "Dados tabulares simples", icon: FileSpreadsheet },
+            { label: "PNG", desc: "Imagem do dashboard", icon: Image },
+          ].map((opt) => (
+            <button
+              key={opt.label}
+              className="flex flex-col items-center gap-2 rounded-lg border-2 border-border p-4 hover:border-[var(--vp-yellow)] transition-colors cursor-pointer"
+              onClick={() => {
+                setExportOpen(false);
+              }}
+            >
+              <opt.icon className="h-6 w-6 text-muted-foreground" />
+              <span className="text-sm font-medium text-foreground">{opt.label}</span>
+              <span className="text-[10px] text-muted-foreground text-center leading-tight">
+                {opt.desc}
+              </span>
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+          <input type="checkbox" id="include-raw" className="rounded" />
+          <label htmlFor="include-raw">Incluir dados brutos</label>
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
