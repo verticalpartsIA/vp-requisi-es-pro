@@ -114,8 +114,24 @@ function toNodeHeaders(headers) {
 }
 
 function toWebRequest(req) {
-  const origin = process.env.APP_ORIGIN || `http://${req.headers.host || `127.0.0.1:${port}`}`;
-  const url = new URL(req.url || "/", origin);
+  // Garante uma origin valida mesmo se APP_ORIGIN estiver errado/ausente
+  let origin = "http://localhost:" + port;
+  const configured = process.env.APP_ORIGIN;
+  if (configured) {
+    try {
+      origin = new URL(configured).origin;
+    } catch {
+      // APP_ORIGIN invalido — usa fallback
+    }
+  } else {
+    const host = req.headers.host || req.headers[":authority"];
+    if (host) {
+      origin = host.startsWith("http") ? host : "https://" + host;
+      try { new URL(origin); } catch { origin = "http://localhost:" + port; }
+    }
+  }
+  const rawUrl = req.url || "/";
+  const url = new URL(rawUrl.startsWith("http") ? rawUrl : origin + rawUrl);
   const headers = new Headers();
 
   for (const [key, value] of Object.entries(req.headers)) {
