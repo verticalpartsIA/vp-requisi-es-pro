@@ -112,20 +112,6 @@ function ProductsPage() {
       .map((link) => link.trim())
       .filter(Boolean);
 
-    const hasInvalidLink = cleanedReferenceLinks.some((link) => {
-      try {
-        new URL(link);
-        return false;
-      } catch {
-        return true;
-      }
-    });
-
-    if (hasInvalidLink) {
-      toast.error("Todos os links de referência devem ser URLs válidas.");
-      return;
-    }
-
     setIsSubmitting(true);
 
     try {
@@ -156,11 +142,11 @@ function ProductsPage() {
       setTickets(await listProductRequisitionsClient());
       await router.invalidate();
     } catch (error) {
-      toast.error(
+      const msg =
         error instanceof Error
           ? error.message
-          : "Não foi possível criar a requisição agora.",
-      );
+          : (error as { message?: string })?.message ?? "Não foi possível criar a requisição agora.";
+      toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -286,7 +272,7 @@ function ProductsPage() {
                 {referenceLinks.map((link, idx) => (
                   <div key={idx} className="flex gap-2">
                     <Input
-                      placeholder="https://..."
+                      placeholder="Cole aqui o Link"
                       value={link}
                       onChange={(e) => updateReferenceLink(idx, e.target.value)}
                     />

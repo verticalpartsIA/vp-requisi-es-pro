@@ -14,7 +14,7 @@ const productRequisitionSchema = z.object({
   technicalSpecs: z.string().max(2000).optional().default(""),
   brandPreference: z.string().max(200).optional().default(""),
   modelReference: z.string().max(200).optional().default(""),
-  referenceLinks: z.array(z.string().url()).max(5),
+  referenceLinks: z.array(z.string().max(500)).max(5),
   onlinePurchaseSuggestion: z.string().max(1000).optional().default(""),
   deliveryDeadline: z.string(),
   deliveryLocation: z.string().min(1).max(500),
