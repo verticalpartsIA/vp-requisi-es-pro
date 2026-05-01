@@ -76,23 +76,98 @@ type SlaStatus = "ok" | "warning" | "breach";
  *  Mock data — NO financial data (§2.3)
  * ──────────────────────────────────────────────── */
 
-const slaTargets = {
-  "V1→V2": 4,
-  "V2→V3": 24,
-  "V3→V4": 8,
-  "V4→V5": 48,
-};
+interface SLATarget {
+  module: string;
+  target_v1_to_v2: number;
+  target_v2_to_v3: number;
+  target_v3_to_v4: number;
+  target_v4_completion: number;
+  target_total: number;
+  business_hours_only: boolean;
+}
 
+const SLA_TARGETS: SLATarget[] = [
+  {
+    module: "M1",
+    target_v1_to_v2: 24,
+    target_v2_to_v3: 72,
+    target_v3_to_v4: 48,
+    target_v4_completion: 240,
+    target_total: 720,
+    business_hours_only: false,
+  },
+  {
+    module: "M2",
+    target_v1_to_v2: 4,
+    target_v2_to_v3: 24,
+    target_v3_to_v4: 24,
+    target_v4_completion: 168,
+    target_total: 336,
+    business_hours_only: false,
+  },
+  {
+    module: "M3",
+    target_v1_to_v2: 48,
+    target_v2_to_v3: 72,
+    target_v3_to_v4: 48,
+    target_v4_completion: 480,
+    target_total: 720,
+    business_hours_only: false,
+  },
+  {
+    module: "M4",
+    target_v1_to_v2: 8,
+    target_v2_to_v3: 24,
+    target_v3_to_v4: 24,
+    target_v4_completion: 120,
+    target_total: 336,
+    business_hours_only: false,
+  },
+  {
+    module: "M5",
+    target_v1_to_v2: 24,
+    target_v2_to_v3: 48,
+    target_v3_to_v4: 48,
+    target_v4_completion: 240,
+    target_total: 720,
+    business_hours_only: false,
+  },
+  {
+    module: "M6",
+    target_v1_to_v2: 24,
+    target_v2_to_v3: 48,
+    target_v3_to_v4: 48,
+    target_v4_completion: 240,
+    target_total: 720,
+    business_hours_only: false,
+  },
+];
+
+function getSlaTarget(module: string): SLATarget {
+  return SLA_TARGETS.find((t) => t.module === module) ?? SLA_TARGETS[0];
+}
+
+function getStageTarget(module: string, stage: string): number {
+  const t = getSlaTarget(module);
+  if (stage === "V2") return t.target_v1_to_v2;
+  if (stage === "V3") return t.target_v2_to_v3;
+  if (stage === "V4") return t.target_v3_to_v4;
+  if (stage === "V5") return t.target_v4_completion;
+  return t.target_total;
+}
+
+/* Global averages for the metrics cards (mock) */
 const slaMetrics: {
   label: string;
   avgHours: number;
+  targetLabel: string;
   targetHours: number;
   status: SlaStatus;
 }[] = [
-  { label: "V1 → V2", avgHours: 2.4, targetHours: 4, status: "ok" },
-  { label: "V2 → V3", avgHours: 18, targetHours: 24, status: "ok" },
-  { label: "V3 → V4", avgHours: 10.5, targetHours: 8, status: "warning" },
-  { label: "V4 → V5", avgHours: 72, targetHours: 48, status: "breach" },
+  { label: "V1 → V2", avgHours: 12, targetLabel: "M1: 24h", targetHours: 24, status: "ok" },
+  { label: "V2 → V3", avgHours: 52, targetLabel: "M1: 72h", targetHours: 72, status: "ok" },
+  { label: "V3 → V4", avgHours: 55, targetLabel: "M1: 48h", targetHours: 48, status: "warning" },
+  { label: "V4 → Conclusão", avgHours: 310, targetLabel: "M1: 240h", targetHours: 240, status: "breach" },
 ];
 
 const auditEntries: AuditLogEntry[] = [
@@ -270,15 +345,10 @@ function formatMetricAvg(hours: number): string {
 
 function deriveSlaStatus(entry: AuditLogEntry): SlaStatus {
   if (entry.is_sla_breach) return "breach";
-  // Warning if over 75% of target for the transition
   if (entry.sla_elapsed_hours > 0) {
-    const stage = entry.module_stage;
-    let target = 999;
-    if (stage === "V2") target = slaTargets["V1→V2"];
-    else if (stage === "V3") target = slaTargets["V2→V3"];
-    else if (stage === "V4") target = slaTargets["V3→V4"];
-    else if (stage === "V5") target = slaTargets["V4→V5"];
-    if (entry.sla_elapsed_hours >= target * 0.75 && !entry.is_sla_breach) return "warning";
+    const target = getStageTarget(entry.module, entry.module_stage);
+    if (entry.sla_elapsed_hours >= target) return "breach";
+    if (entry.sla_elapsed_hours >= target * 0.75) return "warning";
   }
   return "ok";
 }
@@ -380,7 +450,7 @@ function LogsPage() {
                 {formatMetricAvg(m.avgHours)}
               </p>
               <p className="text-[10px] text-muted-foreground mt-0.5">
-                Meta: {formatMetricAvg(m.targetHours)}
+                Meta: {m.targetLabel}
                 {m.status === "breach" && (
                   <span className="text-red-500 font-semibold ml-1">● Excedido</span>
                 )}
