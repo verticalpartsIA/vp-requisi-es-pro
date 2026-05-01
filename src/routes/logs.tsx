@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { OctagonAlert, Bell, Lightbulb } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +30,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 
 export const Route = createFileRoute("/logs")({
   head: () => ({
@@ -73,9 +80,161 @@ interface AuditLogEntry {
 
 type SlaStatus = "ok" | "warning" | "breach";
 
+/* ── Ticket Detail types (API response schema) ── */
+
+interface StageSummary {
+  stage: string;
+  status: "COMPLETED" | "IN_PROGRESS" | "PENDING";
+  started_at: string;
+  completed_at?: string;
+  duration_hours: number;
+  actor: string;
+  actor_role: string;
+}
+
+interface TicketDetailResponse {
+  ticket_id: string;
+  module: string;
+  status: string;
+  lifecycle: {
+    created_at: string;
+    completed_at?: string;
+    total_duration_hours: number;
+    sla_target_hours: number;
+    sla_formatted: string;
+    is_within_sla: boolean;
+    sla_percentage_used: number;
+  };
+  current_stage: string;
+  stages_summary: StageSummary[];
+  logs: AuditLogEntry[];
+  bottleneck_analysis: BottleneckAnalysis | null;
+}
+
 /* ────────────────────────────────────────────────
  *  Mock data — NO financial data (§2.3)
  * ──────────────────────────────────────────────── */
+
+const ticketDetails: Record<string, TicketDetailResponse> = {
+  "M1-000065": {
+    ticket_id: "M1-000065",
+    module: "M1",
+    status: "EM_APROVAÇÃO",
+    lifecycle: {
+      created_at: "28/04/2026 09:15",
+      total_duration_hours: 22.75,
+      sla_target_hours: 720,
+      sla_formatted: "22h",
+      is_within_sla: true,
+      sla_percentage_used: 3.2,
+    },
+    current_stage: "V3_APROVACAO",
+    stages_summary: [
+      { stage: "V1_REQUISICAO", status: "COMPLETED", started_at: "28/04 09:15", completed_at: "28/04 09:15", duration_hours: 0, actor: "Carlos Silva", actor_role: "Requisitante" },
+      { stage: "V2_COTACAO", status: "COMPLETED", started_at: "28/04 09:15", completed_at: "28/04 11:30", duration_hours: 2.25, actor: "Ana Oliveira", actor_role: "Cotador" },
+      { stage: "V3_APROVACAO", status: "IN_PROGRESS", started_at: "29/04 08:00", duration_hours: 42, actor: "Diretor Marcos", actor_role: "Aprovador" },
+      { stage: "V4_COMPRA", status: "PENDING", started_at: "", duration_hours: 0, actor: "—", actor_role: "Comprador" },
+    ],
+    logs: [],
+    bottleneck_analysis: null,
+  },
+  "M4-000031": {
+    ticket_id: "M4-000031",
+    module: "M4",
+    status: "EM_COTAÇÃO",
+    lifecycle: {
+      created_at: "25/04/2026 14:22",
+      total_duration_hours: 68,
+      sla_target_hours: 336,
+      sla_formatted: "2 dias 20h",
+      is_within_sla: false,
+      sla_percentage_used: 20.2,
+    },
+    current_stage: "V2_COTACAO",
+    stages_summary: [
+      { stage: "V1_REQUISICAO", status: "COMPLETED", started_at: "25/04 14:22", completed_at: "25/04 14:22", duration_hours: 0, actor: "Roberto Mendes", actor_role: "Requisitante" },
+      { stage: "V2_COTACAO", status: "IN_PROGRESS", started_at: "27/04 10:00", duration_hours: 68, actor: "Ana Oliveira", actor_role: "Cotador" },
+      { stage: "V3_APROVACAO", status: "PENDING", started_at: "", duration_hours: 0, actor: "—", actor_role: "Aprovador" },
+      { stage: "V4_COMPRA", status: "PENDING", started_at: "", duration_hours: 0, actor: "—", actor_role: "Comprador" },
+    ],
+    logs: [],
+    bottleneck_analysis: {
+      ticket_id: "M4-000031",
+      current_stage: "V2",
+      stuck_since: "27/04/2026 10:00",
+      hours_in_current_stage: 68,
+      target_hours_for_stage: 24,
+      is_bottleneck: true,
+      responsible_user: "Ana Oliveira",
+      responsible_role: "Cotador",
+      blocking_reason: "Aguardando diagnóstico técnico",
+      recommendation: "Solicitar laudo técnico urgente ao requisitante",
+      escalation_required: true,
+    },
+  },
+  "M2-000042": {
+    ticket_id: "M2-000042",
+    module: "M2",
+    status: "APROVADO",
+    lifecycle: {
+      created_at: "27/04/2026 07:45",
+      total_duration_hours: 8.75,
+      sla_target_hours: 336,
+      sla_formatted: "8h",
+      is_within_sla: true,
+      sla_percentage_used: 2.6,
+    },
+    current_stage: "V3_APROVACAO",
+    stages_summary: [
+      { stage: "V1_REQUISICAO", status: "COMPLETED", started_at: "27/04 07:45", completed_at: "27/04 07:45", duration_hours: 0, actor: "Fernanda Costa", actor_role: "Requisitante" },
+      { stage: "V3_APROVACAO", status: "COMPLETED", started_at: "27/04 07:45", completed_at: "27/04 16:30", duration_hours: 8.75, actor: "Diretor Marcos", actor_role: "Aprovador" },
+    ],
+    logs: [],
+    bottleneck_analysis: null,
+  },
+  "M5-000028": {
+    ticket_id: "M5-000028",
+    module: "M5",
+    status: "FINALIZADO",
+    lifecycle: {
+      created_at: "24/04/2026 11:15",
+      completed_at: "30/04/2026 09:00",
+      total_duration_hours: 178,
+      sla_target_hours: 720,
+      sla_formatted: "7 dias 10h",
+      is_within_sla: true,
+      sla_percentage_used: 24.7,
+    },
+    current_stage: "V5_RECEBIMENTO",
+    stages_summary: [
+      { stage: "V1_REQUISICAO", status: "COMPLETED", started_at: "24/04 11:15", completed_at: "24/04 11:15", duration_hours: 0, actor: "Paulo Ferreira", actor_role: "Comprador" },
+      { stage: "V4_COMPRA", status: "COMPLETED", started_at: "24/04 11:15", completed_at: "24/04 11:15", duration_hours: 36, actor: "Paulo Ferreira", actor_role: "Comprador" },
+      { stage: "V5_RECEBIMENTO", status: "COMPLETED", started_at: "30/04 09:00", completed_at: "30/04 09:00", duration_hours: 142, actor: "José Santos", actor_role: "Almoxarife" },
+    ],
+    logs: [],
+    bottleneck_analysis: null,
+  },
+  "M3-000018": {
+    ticket_id: "M3-000018",
+    module: "M3",
+    status: "EM_COTAÇÃO",
+    lifecycle: {
+      created_at: "28/04/2026 10:00",
+      total_duration_hours: 30,
+      sla_target_hours: 720,
+      sla_formatted: "1 dia 6h",
+      is_within_sla: true,
+      sla_percentage_used: 4.2,
+    },
+    current_stage: "V2_COTACAO",
+    stages_summary: [
+      { stage: "V1_REQUISICAO", status: "COMPLETED", started_at: "28/04 10:00", completed_at: "28/04 10:00", duration_hours: 0, actor: "Ana Oliveira", actor_role: "Cotador" },
+      { stage: "V2_COTACAO", status: "IN_PROGRESS", started_at: "28/04 17:00", duration_hours: 30, actor: "Ana Oliveira", actor_role: "Cotador" },
+    ],
+    logs: [],
+    bottleneck_analysis: null,
+  },
+};
 
 interface BottleneckAnalysis {
   ticket_id: string;
@@ -448,6 +607,8 @@ function LogsPage() {
   const [stageFilter, setStageFilter] = useState("Todos");
   const [slaFilter, setSlaFilter] = useState("Todos");
   const [expandedTicket, setExpandedTicket] = useState<string | null>(null);
+  const [selectedTicket, setSelectedTicket] = useState<string | null>(null);
+  const detail = selectedTicket ? ticketDetails[selectedTicket] : null;
 
   const filtered = auditEntries.filter((e) => {
     if (moduleFilter !== "Todos" && e.module !== moduleFilter) return false;
@@ -741,7 +902,22 @@ function LogsPage() {
 
               {isExpanded && (
                 <div className="border-t border-border px-4 pb-4">
-                  <div className="relative ml-6 mt-4 space-y-0">
+                  {/* Ticket detail button */}
+                  <div className="flex justify-end mt-3 mb-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs gap-1.5"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedTicket(ticketId);
+                      }}
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      Ver detalhes do ticket
+                    </Button>
+                  </div>
+                  <div className="relative ml-6 mt-2 space-y-0">
                     {/* Vertical timeline line */}
                     <div className="absolute left-[7px] top-2 bottom-2 w-px bg-border" />
 
@@ -839,6 +1015,254 @@ function LogsPage() {
           );
         })}
       </div>
+
+      {/* Ticket Detail Sheet */}
+      <Sheet open={!!selectedTicket} onOpenChange={(open) => !open && setSelectedTicket(null)}>
+        <SheetContent className="sm:max-w-lg overflow-y-auto">
+          {detail && (
+            <>
+              <SheetHeader>
+                <SheetTitle className="flex items-center gap-2">
+                  <span className="font-mono">{detail.ticket_id}</span>
+                  <Badge variant="outline" className="text-[10px]">
+                    {detail.module}
+                  </Badge>
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] ${
+                      detail.status === "FINALIZADO"
+                        ? "bg-emerald-100 text-emerald-700 border-emerald-200"
+                        : "bg-blue-100 text-blue-700 border-blue-200"
+                    }`}
+                  >
+                    {detail.status.replace(/_/g, " ")}
+                  </Badge>
+                </SheetTitle>
+              </SheetHeader>
+
+              <div className="space-y-5 mt-6">
+                {/* Lifecycle Summary */}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Ciclo de Vida
+                  </h3>
+                  <Card>
+                    <CardContent className="p-4 space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">Criado em</p>
+                          <p className="text-sm font-medium text-foreground">{detail.lifecycle.created_at}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">
+                            {detail.lifecycle.completed_at ? "Concluído em" : "Em andamento"}
+                          </p>
+                          <p className="text-sm font-medium text-foreground">
+                            {detail.lifecycle.completed_at ?? "—"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">Duração Total</p>
+                          <p className="text-sm font-bold text-foreground">
+                            {detail.lifecycle.sla_formatted}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">Meta SLA</p>
+                          <p className="text-sm font-medium text-foreground">
+                            {formatSla(detail.lifecycle.sla_target_hours)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* SLA Progress */}
+                      <div>
+                        <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
+                          <span>{detail.lifecycle.sla_percentage_used.toFixed(1)}% utilizado</span>
+                          <span className={detail.lifecycle.is_within_sla ? "text-emerald-600" : "text-red-500"}>
+                            {detail.lifecycle.is_within_sla ? "✓ Dentro do SLA" : "✗ SLA Excedido"}
+                          </span>
+                        </div>
+                        <Progress
+                          value={Math.min(detail.lifecycle.sla_percentage_used, 100)}
+                          className="h-2"
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Stages Summary */}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Etapas
+                  </h3>
+                  <div className="space-y-2">
+                    {detail.stages_summary.map((stage, idx) => {
+                      const stageLabel = stage.stage.replace("_", " · ");
+                      return (
+                        <div
+                          key={stage.stage}
+                          className={`rounded-lg border p-3 ${
+                            stage.status === "IN_PROGRESS"
+                              ? "border-blue-200 bg-blue-50/50"
+                              : stage.status === "COMPLETED"
+                                ? "border-border bg-card"
+                                : "border-dashed border-muted bg-muted/20"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div
+                                className={`h-2.5 w-2.5 rounded-full ${
+                                  stage.status === "COMPLETED"
+                                    ? "bg-emerald-500"
+                                    : stage.status === "IN_PROGRESS"
+                                      ? "bg-blue-500 animate-pulse"
+                                      : "bg-muted-foreground/30"
+                                }`}
+                              />
+                              <span className="text-xs font-semibold text-foreground">
+                                {stageLabel}
+                              </span>
+                            </div>
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] ${
+                                stage.status === "COMPLETED"
+                                  ? "bg-emerald-100 text-emerald-700 border-emerald-200"
+                                  : stage.status === "IN_PROGRESS"
+                                    ? "bg-blue-100 text-blue-700 border-blue-200"
+                                    : "text-muted-foreground"
+                              }`}
+                            >
+                              {stage.status === "COMPLETED"
+                                ? "Concluído"
+                                : stage.status === "IN_PROGRESS"
+                                  ? "Em andamento"
+                                  : "Pendente"}
+                            </Badge>
+                          </div>
+                          {stage.status !== "PENDING" && (
+                            <div className="flex items-center gap-3 mt-2 text-[11px] text-muted-foreground">
+                              <span className="flex items-center gap-1">
+                                <User className="h-3 w-3" />
+                                {stage.actor} ({stage.actor_role})
+                              </span>
+                              {stage.duration_hours > 0 && (
+                                <span className="flex items-center gap-1">
+                                  <Hourglass className="h-3 w-3" />
+                                  {formatSla(stage.duration_hours)}
+                                </span>
+                              )}
+                              {stage.started_at && (
+                                <span className="flex items-center gap-1">
+                                  <Clock className="h-3 w-3" />
+                                  {stage.started_at}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Bottleneck */}
+                {detail.bottleneck_analysis && detail.bottleneck_analysis.is_bottleneck && (
+                  <div className="space-y-3">
+                    <h3 className="text-xs font-semibold text-red-500 uppercase tracking-wider flex items-center gap-1.5">
+                      <OctagonAlert className="h-3.5 w-3.5" />
+                      Gargalo
+                    </h3>
+                    <div className="rounded-lg border border-red-200 bg-red-50/30 p-3 space-y-2">
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="font-semibold text-foreground">
+                          Parado em {detail.bottleneck_analysis.current_stage}
+                        </span>
+                        <span className="text-red-600 font-semibold text-[10px]">
+                          {formatSla(detail.bottleneck_analysis.hours_in_current_stage)} / meta {formatSla(detail.bottleneck_analysis.target_hours_for_stage)}
+                        </span>
+                      </div>
+                      {detail.bottleneck_analysis.blocking_reason && (
+                        <p className="text-[11px] text-red-600">
+                          {detail.bottleneck_analysis.blocking_reason}
+                        </p>
+                      )}
+                      <div className="flex items-start gap-1.5 text-[11px] text-amber-700 bg-amber-50 px-2 py-1 rounded">
+                        <Lightbulb className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                        <span>{detail.bottleneck_analysis.recommendation}</span>
+                      </div>
+                      {detail.bottleneck_analysis.escalation_required && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-red-100 border border-red-300 px-2 py-0.5 text-[10px] font-semibold text-red-700">
+                          <Bell className="h-3 w-3" />
+                          Escalonamento necessário
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Audit Logs for this ticket */}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Histórico de Ações
+                  </h3>
+                  <div className="relative space-y-0">
+                    <div className="absolute left-[7px] top-2 bottom-2 w-px bg-border" />
+                    {(auditEntries.filter((e) => e.ticket_id === detail.ticket_id)).map((entry, idx, arr) => {
+                      const status = deriveSlaStatus(entry);
+                      return (
+                        <div key={entry.id} className="relative pl-7 pb-4 last:pb-0">
+                          <div
+                            className={`absolute left-0 top-1 h-[14px] w-[14px] rounded-full border-2 ${
+                              status === "breach"
+                                ? "border-red-400 bg-red-100"
+                                : status === "warning"
+                                  ? "border-amber-400 bg-amber-100"
+                                  : "border-emerald-400 bg-emerald-100"
+                            }`}
+                          />
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Badge variant="outline" className="text-[10px]">
+                                {entry.module_stage}
+                              </Badge>
+                              <span className="text-xs font-semibold text-foreground">
+                                {entry.action_description}
+                              </span>
+                            </div>
+                            {entry.metadata && (
+                              <div className="flex flex-wrap gap-1.5 mt-1">
+                                {entry.metadata.from_status && entry.metadata.to_status && (
+                                  <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
+                                    {entry.metadata.from_status} → {entry.metadata.to_status}
+                                  </span>
+                                )}
+                                {entry.metadata.supplier_name && (
+                                  <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
+                                    {entry.metadata.supplier_name}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2.5 mt-1 text-[10px] text-muted-foreground">
+                              <span>{entry.user_name}</span>
+                              <span>{entry.created_at}</span>
+                              <span>SLA: {formatSla(entry.sla_elapsed_hours)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
