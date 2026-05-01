@@ -13,6 +13,7 @@ import { Route as TripsRouteImport } from './routes/trips'
 import { Route as ServicesRouteImport } from './routes/services'
 import { Route as RentalRouteImport } from './routes/rental'
 import { Route as ReceiptRouteImport } from './routes/receipt'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as QuotingRouteImport } from './routes/quoting'
 import { Route as PurchasingRouteImport } from './routes/purchasing'
 import { Route as ProductsRouteImport } from './routes/products'
@@ -20,8 +21,10 @@ import { Route as MaintenanceRouteImport } from './routes/maintenance'
 import { Route as LogsRouteImport } from './routes/logs'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as FreightRouteImport } from './routes/freight'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as ApprovalRouteImport } from './routes/approval'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 
 const TripsRoute = TripsRouteImport.update({
@@ -42,6 +45,11 @@ const RentalRoute = RentalRouteImport.update({
 const ReceiptRoute = ReceiptRouteImport.update({
   id: '/receipt',
   path: '/receipt',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const QuotingRoute = QuotingRouteImport.update({
@@ -79,6 +87,11 @@ const FreightRoute = FreightRouteImport.update({
   path: '/freight',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApprovalRoute = ApprovalRouteImport.update({
   id: '/approval',
   path: '/approval',
@@ -89,6 +102,11 @@ const AnalyticsRoute = AnalyticsRouteImport.update({
   path: '/analytics',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -97,8 +115,10 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/analytics': typeof AnalyticsRoute
   '/approval': typeof ApprovalRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/freight': typeof FreightRoute
   '/login': typeof LoginRoute
   '/logs': typeof LogsRoute
@@ -107,14 +127,17 @@ export interface FileRoutesByFullPath {
   '/purchasing': typeof PurchasingRoute
   '/quoting': typeof QuotingRoute
   '/receipt': typeof ReceiptRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/rental': typeof RentalRoute
   '/services': typeof ServicesRoute
   '/trips': typeof TripsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/analytics': typeof AnalyticsRoute
   '/approval': typeof ApprovalRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/freight': typeof FreightRoute
   '/login': typeof LoginRoute
   '/logs': typeof LogsRoute
@@ -123,6 +146,7 @@ export interface FileRoutesByTo {
   '/purchasing': typeof PurchasingRoute
   '/quoting': typeof QuotingRoute
   '/receipt': typeof ReceiptRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/rental': typeof RentalRoute
   '/services': typeof ServicesRoute
   '/trips': typeof TripsRoute
@@ -130,8 +154,10 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/analytics': typeof AnalyticsRoute
   '/approval': typeof ApprovalRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/freight': typeof FreightRoute
   '/login': typeof LoginRoute
   '/logs': typeof LogsRoute
@@ -140,6 +166,7 @@ export interface FileRoutesById {
   '/purchasing': typeof PurchasingRoute
   '/quoting': typeof QuotingRoute
   '/receipt': typeof ReceiptRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/rental': typeof RentalRoute
   '/services': typeof ServicesRoute
   '/trips': typeof TripsRoute
@@ -148,8 +175,10 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/admin'
     | '/analytics'
     | '/approval'
+    | '/forgot-password'
     | '/freight'
     | '/login'
     | '/logs'
@@ -158,14 +187,17 @@ export interface FileRouteTypes {
     | '/purchasing'
     | '/quoting'
     | '/receipt'
+    | '/reset-password'
     | '/rental'
     | '/services'
     | '/trips'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/admin'
     | '/analytics'
     | '/approval'
+    | '/forgot-password'
     | '/freight'
     | '/login'
     | '/logs'
@@ -174,14 +206,17 @@ export interface FileRouteTypes {
     | '/purchasing'
     | '/quoting'
     | '/receipt'
+    | '/reset-password'
     | '/rental'
     | '/services'
     | '/trips'
   id:
     | '__root__'
     | '/'
+    | '/admin'
     | '/analytics'
     | '/approval'
+    | '/forgot-password'
     | '/freight'
     | '/login'
     | '/logs'
@@ -190,6 +225,7 @@ export interface FileRouteTypes {
     | '/purchasing'
     | '/quoting'
     | '/receipt'
+    | '/reset-password'
     | '/rental'
     | '/services'
     | '/trips'
@@ -197,8 +233,10 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRoute
   AnalyticsRoute: typeof AnalyticsRoute
   ApprovalRoute: typeof ApprovalRoute
+  ForgotPasswordRoute: typeof ForgotPasswordRoute
   FreightRoute: typeof FreightRoute
   LoginRoute: typeof LoginRoute
   LogsRoute: typeof LogsRoute
@@ -207,6 +245,7 @@ export interface RootRouteChildren {
   PurchasingRoute: typeof PurchasingRoute
   QuotingRoute: typeof QuotingRoute
   ReceiptRoute: typeof ReceiptRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
   RentalRoute: typeof RentalRoute
   ServicesRoute: typeof ServicesRoute
   TripsRoute: typeof TripsRoute
@@ -240,6 +279,13 @@ declare module '@tanstack/react-router' {
       path: '/receipt'
       fullPath: '/receipt'
       preLoaderRoute: typeof ReceiptRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/quoting': {
@@ -291,6 +337,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FreightRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/approval': {
       id: '/approval'
       path: '/approval'
@@ -305,6 +358,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AnalyticsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -317,8 +377,10 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRoute: AdminRoute,
   AnalyticsRoute: AnalyticsRoute,
   ApprovalRoute: ApprovalRoute,
+  ForgotPasswordRoute: ForgotPasswordRoute,
   FreightRoute: FreightRoute,
   LoginRoute: LoginRoute,
   LogsRoute: LogsRoute,
@@ -327,6 +389,7 @@ const rootRouteChildren: RootRouteChildren = {
   PurchasingRoute: PurchasingRoute,
   QuotingRoute: QuotingRoute,
   ReceiptRoute: ReceiptRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
   RentalRoute: RentalRoute,
   ServicesRoute: ServicesRoute,
   TripsRoute: TripsRoute,

@@ -1,0 +1,430 @@
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState, useCallback } from "react";
+import {
+  Shield,
+  UserCog,
+  BadgeDollarSign,
+  Trash2,
+  Plus,
+  Save,
+  RefreshCw,
+  ChevronDown,
+} from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Separator } from "@/components/ui/separator";
+import { useAuth, type AppRole } from "@/features/auth/auth-context";
+import {
+  listUsersWithRoles,
+  addUserRole,
+  removeUserRole,
+  updateApprovalTier,
+  getTierThresholds,
+  saveTierThresholds,
+  type UserWithRoles,
+  type TierThresholds,
+} from "@/features/admin/api";
+import { toast } from "sonner";
+
+export const Route = createFileRoute("/admin")({
+  component: AdminPage,
+});
+
+const ALL_ROLES: AppRole[] = ["admin", "solicitante", "comprador", "aprovador", "almoxarife"];
+
+const ROLE_LABELS: Record<AppRole, string> = {
+  admin: "Admin",
+  solicitante: "Solicitante",
+  comprador: "Comprador",
+  aprovador: "Aprovador",
+  almoxarife: "Almoxarife",
+};
+
+const ROLE_COLORS: Record<AppRole, string> = {
+  admin: "bg-red-100 text-red-700 border-red-200",
+  solicitante: "bg-blue-100 text-blue-700 border-blue-200",
+  comprador: "bg-purple-100 text-purple-700 border-purple-200",
+  aprovador: "bg-green-100 text-green-700 border-green-200",
+  almoxarife: "bg-orange-100 text-orange-700 border-orange-200",
+};
+
+const TIER_LABELS: Record<1 | 2 | 3, string> = {
+  1: "1ª Alçada",
+  2: "2ª Alçada",
+  3: "3ª Alçada",
+};
+
+function formatBRL(value: number) {
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+// ─── Página principal ──────────────────────────────────────────────────────
+
+function AdminPage() {
+  const navigate = useNavigate();
+  const { hasRole, isLoading: authLoading } = useAuth();
+
+  useEffect(() => {
+    if (!authLoading && !hasRole("admin")) {
+      toast.error("Acesso restrito ao administrador.");
+      void navigate({ to: "/" });
+    }
+  }, [authLoading, hasRole, navigate]);
+
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-vp-yellow border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (!hasRole("admin")) return null;
+
+  return (
+    <div className="max-w-5xl mx-auto space-y-6 p-6">
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-vp-yellow text-vp-dark">
+          <Shield className="h-5 w-5" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold">Painel Administrativo</h1>
+          <p className="text-sm text-muted-foreground">
+            Gerencie usuários, papéis e alçadas de aprovação
+          </p>
+        </div>
+      </div>
+
+      <Tabs defaultValue="users">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="users" className="flex items-center gap-2">
+            <UserCog className="h-4 w-4" />
+            Usuários e Papéis
+          </TabsTrigger>
+          <TabsTrigger value="tiers" className="flex items-center gap-2">
+            <BadgeDollarSign className="h-4 w-4" />
+            Alçadas de Aprovação
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="users" className="mt-4">
+          <UsersTab />
+        </TabsContent>
+
+        <TabsContent value="tiers" className="mt-4">
+          <TiersTab />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+// ─── Aba Usuários ──────────────────────────────────────────────────────────
+
+function UsersTab() {
+  const [users, setUsers] = useState<UserWithRoles[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setUsers(await listUsersWithRoles());
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao carregar usuários.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const handleAddRole = async (userId: string, role: AppRole) => {
+    try {
+      await addUserRole(userId, role);
+      toast.success(`Papel "${ROLE_LABELS[role]}" adicionado.`);
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao adicionar papel.");
+    }
+  };
+
+  const handleRemoveRole = async (userId: string, role: AppRole) => {
+    try {
+      await removeUserRole(userId, role);
+      toast.success(`Papel "${ROLE_LABELS[role]}" removido.`);
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao remover papel.");
+    }
+  };
+
+  const handleSetTier = async (userId: string, tier: 1 | 2 | 3 | null) => {
+    try {
+      await updateApprovalTier(userId, tier);
+      toast.success(tier ? `Alçada ${tier} atribuída.` : "Alçada removida.");
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao atualizar alçada.");
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-vp-yellow border-t-transparent" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <p className="text-sm text-muted-foreground">{users.length} usuário(s) encontrado(s)</p>
+        <Button variant="outline" size="sm" onClick={() => void load()}>
+          <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+          Atualizar
+        </Button>
+      </div>
+
+      {users.map((user) => {
+        const existingRoles = user.roles.map((r) => r.role);
+        const availableRoles = ALL_ROLES.filter((r) => !existingRoles.includes(r));
+        const aprovadorEntry = user.roles.find((r) => r.role === "aprovador");
+
+        return (
+          <Card key={user.id} className="border-border/60">
+            <CardContent className="pt-5 pb-4">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                {/* Info do usuário */}
+                <div className="min-w-0">
+                  <p className="font-semibold text-sm truncate">
+                    {user.full_name || "Sem nome"}
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                  {user.department && (
+                    <p className="text-xs text-muted-foreground">{user.department}</p>
+                  )}
+                </div>
+
+                {/* Papéis + ações */}
+                <div className="flex flex-col gap-2 min-w-0 sm:items-end">
+                  <div className="flex flex-wrap gap-1.5">
+                    {user.roles.map(({ role, approval_tier }) => (
+                      <span
+                        key={role}
+                        className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium ${ROLE_COLORS[role]}`}
+                      >
+                        {ROLE_LABELS[role]}
+                        {role === "aprovador" && approval_tier && (
+                          <span className="opacity-70">· {approval_tier}ª</span>
+                        )}
+                        <button
+                          className="ml-0.5 hover:opacity-70 transition-opacity"
+                          title={`Remover ${ROLE_LABELS[role]}`}
+                          onClick={() => void handleRemoveRole(user.id, role)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))}
+
+                    {availableRoles.length > 0 && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            className="inline-flex items-center gap-1 rounded-full border border-dashed border-muted-foreground/40 px-2.5 py-0.5 text-xs text-muted-foreground hover:border-vp-yellow hover:text-vp-dark transition-colors"
+                            title="Adicionar papel"
+                          >
+                            <Plus className="h-3 w-3" />
+                            Adicionar
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {availableRoles.map((r) => (
+                            <DropdownMenuItem
+                              key={r}
+                              onClick={() => void handleAddRole(user.id, r)}
+                            >
+                              {ROLE_LABELS[r]}
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                  </div>
+
+                  {/* Seletor de alçada para aprovador */}
+                  {aprovadorEntry && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">Alçada:</span>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button className="inline-flex items-center gap-1 rounded border px-2 py-0.5 text-xs hover:bg-accent transition-colors">
+                            {aprovadorEntry.approval_tier
+                              ? TIER_LABELS[aprovadorEntry.approval_tier]
+                              : "Não definida"}
+                            <ChevronDown className="h-3 w-3 opacity-50" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {([1, 2, 3] as const).map((t) => (
+                            <DropdownMenuItem
+                              key={t}
+                              onClick={() => void handleSetTier(user.id, t)}
+                            >
+                              {TIER_LABELS[t]}
+                            </DropdownMenuItem>
+                          ))}
+                          <Separator className="my-1" />
+                          <DropdownMenuItem onClick={() => void handleSetTier(user.id, null)}>
+                            Remover alçada
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Aba Alçadas ───────────────────────────────────────────────────────────
+
+function TiersTab() {
+  const [thresholds, setThresholds] = useState<TierThresholds>({ tier1_max: 1500, tier2_max: 3500 });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    getTierThresholds()
+      .then(setThresholds)
+      .catch((err) => toast.error(err instanceof Error ? err.message : "Erro ao carregar alçadas."))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSave = async () => {
+    if (thresholds.tier1_max <= 0 || thresholds.tier2_max <= thresholds.tier1_max) {
+      toast.error("O limite da 2ª alçada deve ser maior que o da 1ª.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await saveTierThresholds(thresholds);
+      toast.success("Alçadas atualizadas com sucesso.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao salvar alçadas.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-vp-yellow border-t-transparent" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Limites das alçadas de aprovação</CardTitle>
+          <CardDescription>
+            Defina os valores máximos para cada alçada. Requisições acima do limite da 2ª alçada
+            são automaticamente encaminhadas para a 3ª.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {/* Faixa visual */}
+          <div className="grid grid-cols-3 gap-3 text-center text-xs">
+            <div className="rounded-lg border bg-blue-50 p-3">
+              <p className="font-semibold text-blue-700">1ª Alçada</p>
+              <p className="text-muted-foreground mt-0.5">
+                Até {formatBRL(thresholds.tier1_max)}
+              </p>
+            </div>
+            <div className="rounded-lg border bg-green-50 p-3">
+              <p className="font-semibold text-green-700">2ª Alçada</p>
+              <p className="text-muted-foreground mt-0.5">
+                {formatBRL(thresholds.tier1_max + 0.01)} – {formatBRL(thresholds.tier2_max)}
+              </p>
+            </div>
+            <div className="rounded-lg border bg-orange-50 p-3">
+              <p className="font-semibold text-orange-700">3ª Alçada</p>
+              <p className="text-muted-foreground mt-0.5">
+                Acima de {formatBRL(thresholds.tier2_max)}
+              </p>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Inputs de edição */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="tier1_max">Limite máximo da 1ª alçada (R$)</Label>
+              <Input
+                id="tier1_max"
+                type="number"
+                min={1}
+                step={0.01}
+                value={thresholds.tier1_max}
+                onChange={(e) =>
+                  setThresholds((prev) => ({ ...prev, tier1_max: Number(e.target.value) }))
+                }
+                disabled={saving}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="tier2_max">Limite máximo da 2ª alçada (R$)</Label>
+              <Input
+                id="tier2_max"
+                type="number"
+                min={1}
+                step={0.01}
+                value={thresholds.tier2_max}
+                onChange={(e) =>
+                  setThresholds((prev) => ({ ...prev, tier2_max: Number(e.target.value) }))
+                }
+                disabled={saving}
+              />
+            </div>
+          </div>
+
+          <Button variant="vp" onClick={() => void handleSave()} disabled={saving}>
+            <Save className="h-4 w-4 mr-2" />
+            {saving ? "Salvando..." : "Salvar alterações"}
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card className="border-muted/50 bg-muted/30">
+        <CardContent className="pt-4 pb-4">
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            <strong>Como funciona:</strong> ao enviar uma requisição para aprovação, o sistema
+            verifica o valor total e encaminha ao aprovador da alçada correspondente. Certifique-se
+            de que há ao menos um aprovador cadastrado em cada alçada.
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

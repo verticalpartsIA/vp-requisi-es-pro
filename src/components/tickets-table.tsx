@@ -6,7 +6,7 @@ export interface TicketRow {
   title: string;
   requester: string;
   urgency: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
-  status: "RASCUNHO" | "ABERTO" | "COTAÇÃO" | "APROVAÇÃO" | "COMPRA" | "RECEBIMENTO" | "CONCLUÍDO";
+  status: "RASCUNHO" | "ABERTO" | "COTAÇÃO" | "APROVAÇÃO" | "COMPRA" | "RECEBIMENTO" | "CONCLUÍDO" | "REJEITADO" | "CANCELADO";
   date: string;
 }
 

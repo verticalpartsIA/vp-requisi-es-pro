@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/features/auth/auth-context";
 import { toast } from "sonner";
 
@@ -17,11 +18,14 @@ export const Route = createFileRoute("/login")({
 
 function LoginPage() {
   const navigate = useNavigate();
-  const { session, signInWithPassword, isLoading } = useAuth();
+  const { session, signInWithPassword, isLoading, resetPasswordForEmail } = useAuth();
   const { redirect } = Route.useSearch();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [isResetSubmitting, setIsResetSubmitting] = useState(false);
 
   useEffect(() => {
     if (session) {
@@ -47,6 +51,30 @@ function LoginPage() {
       toast.error(error instanceof Error ? error.message : "Não foi possível entrar agora.");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleForgotPassword = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const emailToReset = resetEmail.trim() || email.trim();
+
+    if (!emailToReset) {
+      toast.error("Informe seu email para receber o link de recuperação.");
+      return;
+    }
+
+    setIsResetSubmitting(true);
+
+    try {
+      await resetPasswordForEmail(emailToReset, `${window.location.origin}/reset-password`);
+      toast.success("Se o email existir, enviaremos um link de recuperação.");
+      setResetEmail("");
+      setIsForgotPasswordOpen(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível enviar o link agora.");
+    } finally {
+      setIsResetSubmitting(false);
     }
   };
 
@@ -97,9 +125,49 @@ function LoginPage() {
               <LogIn className="h-4 w-4 mr-2" />
               Entrar
             </Button>
+            <Button
+              type="button"
+              variant="link"
+              className="w-full text-sm text-vp-yellow-dark"
+              disabled={isLoading || isSubmitting}
+              onClick={() => {
+                setResetEmail(email);
+                setIsForgotPasswordOpen(true);
+              }}
+            >
+              Esqueci minha senha
+            </Button>
           </form>
         </CardContent>
       </Card>
+
+      <Dialog open={isForgotPasswordOpen} onOpenChange={setIsForgotPasswordOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Recuperar senha</DialogTitle>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={handleForgotPassword}>
+            <div className="space-y-1.5">
+              <Label htmlFor="reset-email">Email</Label>
+              <Input
+                id="reset-email"
+                type="email"
+                autoComplete="email"
+                placeholder="voce@verticalparts.com.br"
+                value={resetEmail}
+                onChange={(event) => setResetEmail(event.target.value)}
+                disabled={isResetSubmitting}
+              />
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Vamos enviar um link para redefinir sua senha com segurança.
+            </p>
+            <Button type="submit" variant="vp" className="w-full" disabled={isResetSubmitting}>
+              Enviar link de recuperação
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

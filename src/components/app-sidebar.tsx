@@ -13,6 +13,7 @@ import {
   PackageCheck,
   ScrollText,
   LayoutDashboard,
+  Shield,
 } from "lucide-react";
 import {
   Sidebar,
@@ -51,6 +52,7 @@ const system = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Analytics", url: "/analytics", icon: BarChart3 },
   { title: "Logs", url: "/logs", icon: ScrollText },
+  { title: "Admin", url: "/admin", icon: Shield },
 ];
 
 export function AppSidebar() {
@@ -75,6 +77,7 @@ export function AppSidebar() {
     if (item.url === "/") return true;
     if (item.url === "/analytics") return hasRole("admin") || hasRole("comprador") || hasRole("aprovador");
     if (item.url === "/logs") return hasRole("admin");
+    if (item.url === "/admin") return hasRole("admin");
     return false;
   });
 
