@@ -119,7 +119,7 @@ describe("V5 — Recebimento (Receipt)", () => {
   it("identifies discrepancy", () => {
     const ordered = 100;
     const received = 92;
-    const hasDiscrepancy = received !== ordered;
+    const hasDiscrepancy = received < ordered;
     expect(hasDiscrepancy).toBe(true);
   });
 });
