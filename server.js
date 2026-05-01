@@ -3,10 +3,28 @@ import { stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import { extname, join, normalize } from "node:path";
 import { Readable } from "node:stream";
+import { fileURLToPath } from "node:url";
+import { dirname } from "node:path";
+
+// Captura erros fatais para aparecerem nos logs da Hostinger
+process.on("uncaughtException", (err) => {
+  console.error("[server] ERRO NAO CAPTURADO:", err);
+  process.exit(1);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("[server] PROMISE REJEITADA:", reason);
+  process.exit(1);
+});
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const port = Number(process.env.PORT || "3000");
 const host = process.env.HOST || "0.0.0.0";
-const clientDir = join(process.cwd(), "dist", "client");
+// Usa __dirname para garantir o caminho correto independente do cwd
+const clientDir = join(__dirname, "dist", "client");
+
+console.log("[server] Iniciando... PORT=" + port + " cwd=" + process.cwd() + " dir=" + __dirname);
 
 const MIME_TYPES = {
   ".css": "text/css; charset=utf-8",
@@ -74,7 +92,16 @@ function loadEnvFile(fileName) {
 loadEnvFile(".env.local");
 loadEnvFile(".env");
 
-const { default: app } = await import("./dist/server/index.js");
+console.log("[server] Carregando dist/server/index.js...");
+let app;
+try {
+  const mod = await import(join(__dirname, "dist", "server", "index.js"));
+  app = mod.default;
+  console.log("[server] dist/server/index.js carregado com sucesso.");
+} catch (err) {
+  console.error("[server] FALHA ao carregar dist/server/index.js:", err);
+  process.exit(1);
+}
 
 function toNodeHeaders(headers) {
   const nodeHeaders = {};
@@ -191,6 +218,11 @@ const server = createServer(async (req, res) => {
   }
 });
 
+server.on("error", (err) => {
+  console.error("[server] Erro ao iniciar servidor HTTP:", err);
+  process.exit(1);
+});
+
 server.listen(port, host, () => {
-  console.log(`VP Requisicoes Pro rodando em http://${host}:${port}`);
+  console.log(`[server] VP Requisicoes Pro rodando em http://${host}:${port}`);
 });
