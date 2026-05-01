@@ -241,6 +241,7 @@ function AnalyticsPage() {
   const approvalRate = 94.2;
 
   return (
+    <>
     <div className="max-w-6xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
