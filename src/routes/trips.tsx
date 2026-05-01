@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Plane, Plus, ChevronRight, ChevronLeft, MapPin, Hotel,
-  CalendarIcon, Car, Target, AlertTriangle,
+  CalendarIcon, Target, AlertTriangle,
 } from "lucide-react";
 import { format, differenceInCalendarDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -20,13 +20,9 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { TicketsTable, type TicketRow } from "@/components/tickets-table";
+import { supabaseBrowser } from "@/lib/supabase-browser";
+import { useAuth } from "@/features/auth/auth-context";
 import { toast } from "sonner";
-
-const sampleTickets: TicketRow[] = [
-  { id: "M2-000042", title: "Viagem SP — Cliente ABC Ltda", requester: "João Silva", urgency: "HIGH", status: "APROVAÇÃO", date: "27/04" },
-  { id: "M2-000041", title: "Treinamento RJ — NR-12", requester: "Ana Costa", urgency: "MEDIUM", status: "COTAÇÃO", date: "25/04" },
-  { id: "M2-000040", title: "Feira Industrial Hannover", requester: "Carlos Lima", urgency: "LOW", status: "ABERTO", date: "23/04" },
-];
 
 const TRANSPORT_MODES = [
   { value: "AVIAO", label: "Avião" },
@@ -60,10 +56,12 @@ export const Route = createFileRoute("/trips")({
 });
 
 function TripsPage() {
+  const { session, profile, user } = useAuth();
+  const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [step, setStep] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Step 0 — Route
   const [travelerName, setTravelerName] = useState("");
   const [originCity, setOriginCity] = useState("");
   const [destinationCity, setDestinationCity] = useState("");
@@ -71,12 +69,10 @@ function TripsPage() {
   const [returnDate, setReturnDate] = useState<Date | undefined>();
   const [transportMode, setTransportMode] = useState("");
 
-  // Step 1 — Accommodation
   const [needsHotel, setNeedsHotel] = useState(false);
   const [hotelNights, setHotelNights] = useState("");
   const [needsLocalCar, setNeedsLocalCar] = useState(false);
 
-  // Step 2 — Purpose
   const [purposes, setPurposes] = useState<string[]>([]);
   const [justification, setJustification] = useState("");
   const [shortNoticeJustification, setShortNoticeJustification] = useState("");
@@ -90,6 +86,26 @@ function TripsPage() {
     if (!departureDate) return true;
     return differenceInCalendarDays(departureDate, new Date()) >= 5;
   }, [departureDate]);
+
+  const loadTickets = async () => {
+    if (!session) return;
+    const { data } = await supabaseBrowser
+      .from("requisitions")
+      .select("ticket_number,title,requester_name,urgency,status,created_at")
+      .eq("module", "M2")
+      .order("created_at", { ascending: false })
+      .limit(20);
+    setTickets((data ?? []).map((item) => ({
+      id: item.ticket_number,
+      title: item.title,
+      requester: item.requester_name,
+      urgency: item.urgency as TicketRow["urgency"],
+      status: item.status as TicketRow["status"],
+      date: new Date(item.created_at).toLocaleDateString("pt-BR"),
+    })));
+  };
+
+  useEffect(() => { void loadTickets(); }, [session]);
 
   const resetForm = () => {
     setStep(0);
@@ -112,7 +128,8 @@ function TripsPage() {
       if (!destinationCity.trim()) { toast.error("Informe a cidade de destino."); return false; }
       if (!departureDate) { toast.error("Informe a data de partida."); return false; }
       if (!returnDate) { toast.error("Informe a data de retorno."); return false; }
-      if (returnDate <= departureDate) { toast.error("Data de retorno deve ser posterior à partida."); return false; }
+      // Permite retorno no mesmo dia (viagem de ida e volta no dia)
+      if (returnDate < departureDate) { toast.error("Data de retorno não pode ser anterior à partida."); return false; }
       if (!transportMode) { toast.error("Selecione o meio de transporte."); return false; }
     }
     if (step === 1) {
@@ -132,13 +149,53 @@ function TripsPage() {
 
   const handleNext = () => { if (validateStep()) setStep((s) => Math.min(s + 1, STEPS.length - 1)); };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!validateStep()) return;
-    toast.success("Requisição de viagem criada!", {
-      description: `${originCity} → ${destinationCity} (${durationDays} dias)`,
-    });
-    setDialogOpen(false);
-    resetForm();
+    setIsSubmitting(true);
+    try {
+      const urgency = !isAdvancedNotice ? "URGENT" : durationDays > 7 ? "HIGH" : "MEDIUM";
+      const { data, error } = await supabaseBrowser
+        .from("requisitions")
+        .insert({
+          module: "M2",
+          title: `Viagem ${originCity} → ${destinationCity}`,
+          description: justification,
+          justification,
+          urgency,
+          desired_date: departureDate?.toISOString().slice(0, 10) ?? null,
+          requester_name: profile?.full_name || user?.email || "Usuário VP",
+          requester_email: profile?.email || user?.email || "",
+          requester_department: profile?.department || "Não informado",
+          requester_profile_id: user?.id ?? null,
+          module_data: {
+            traveler_name: travelerName,
+            origin_city: originCity,
+            destination_city: destinationCity,
+            departure_date: departureDate?.toISOString().slice(0, 10),
+            return_date: returnDate?.toISOString().slice(0, 10),
+            duration_days: durationDays,
+            transport_mode: transportMode,
+            needs_hotel: needsHotel,
+            hotel_nights: hotelNights ? parseInt(hotelNights) : null,
+            needs_local_car: needsLocalCar,
+            purposes,
+            short_notice_justification: shortNoticeJustification || null,
+          },
+        })
+        .select("ticket_number")
+        .single();
+
+      if (error) throw error;
+      toast.success("Requisição de viagem criada!", { description: (data as { ticket_number: string }).ticket_number });
+      setDialogOpen(false);
+      resetForm();
+      await loadTickets();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : (err as { message?: string })?.message ?? "Não foi possível criar a requisição agora.";
+      toast.error(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -159,7 +216,7 @@ function TripsPage() {
       </div>
 
       <TicketsTable
-        tickets={sampleTickets}
+        tickets={tickets}
         emptyIcon={<Plane className="h-12 w-12 mx-auto text-muted-foreground/40 mb-4" />}
         emptyMessage="Nenhuma requisição de viagem ainda."
       />
@@ -171,7 +228,6 @@ function TripsPage() {
             <DialogDescription>Preencha os dados da viagem corporativa.</DialogDescription>
           </DialogHeader>
 
-          {/* Stepper */}
           <div className="flex items-center justify-between mb-2">
             {STEPS.map((s, i) => {
               const Icon = s.icon;
@@ -191,7 +247,6 @@ function TripsPage() {
             })}
           </div>
 
-          {/* Step 0: Roteiro */}
           {step === 0 && (
             <div className="space-y-4">
               <div className="space-y-1.5">
@@ -201,11 +256,11 @@ function TripsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium">Cidade de Origem *</label>
-                  <Input placeholder="Ex.: São Paulo" value={originCity} onChange={(e) => setOriginCity(e.target.value)} />
+                  <Input placeholder="Ex.: São Paulo, SP" value={originCity} onChange={(e) => setOriginCity(e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium">Cidade de Destino *</label>
-                  <Input placeholder="Ex.: Curitiba" value={destinationCity} onChange={(e) => setDestinationCity(e.target.value)} />
+                  <Input placeholder="Ex.: Curitiba, PR" value={destinationCity} onChange={(e) => setDestinationCity(e.target.value)} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -219,7 +274,11 @@ function TripsPage() {
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar mode="single" selected={departureDate} onSelect={setDepartureDate}
+                      <Calendar mode="single" selected={departureDate} onSelect={(d) => {
+                        setDepartureDate(d);
+                        // Se retorno já escolhido e ficou antes da nova partida, limpa
+                        if (returnDate && d && returnDate < d) setReturnDate(undefined);
+                      }}
                         disabled={(d) => d < new Date()} initialFocus className="p-3 pointer-events-auto" />
                     </PopoverContent>
                   </Popover>
@@ -234,14 +293,20 @@ function TripsPage() {
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
+                      {/* Permite mesmo dia de retorno (ida e volta) */}
                       <Calendar mode="single" selected={returnDate} onSelect={setReturnDate}
-                        disabled={(d) => d < (departureDate || new Date())} initialFocus className="p-3 pointer-events-auto" />
+                        disabled={(d) => d < (departureDate ?? new Date())} initialFocus className="p-3 pointer-events-auto" />
                     </PopoverContent>
                   </Popover>
                 </div>
               </div>
-              {departureDate && returnDate && durationDays > 0 && (
-                <p className="text-sm text-muted-foreground">Duração: <span className="font-semibold text-foreground">{durationDays} dia(s)</span></p>
+              {departureDate && returnDate && (
+                <p className="text-sm text-muted-foreground">
+                  Duração: <span className="font-semibold text-foreground">{durationDays === 0 ? "ida e volta no mesmo dia" : `${durationDays} dia(s)`}</span>
+                  {!isAdvancedNotice && (
+                    <span className="ml-2 text-orange-600 font-medium">⚠ menos de 5 dias de antecedência</span>
+                  )}
+                </p>
               )}
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Meio de Transporte *</label>
@@ -257,7 +322,6 @@ function TripsPage() {
             </div>
           )}
 
-          {/* Step 1: Hospedagem */}
           {step === 1 && (
             <div className="space-y-4">
               <div className="flex items-center justify-between rounded-lg border p-4">
@@ -283,7 +347,6 @@ function TripsPage() {
             </div>
           )}
 
-          {/* Step 2: Objetivo */}
           {step === 2 && (
             <div className="space-y-4">
               <div className="space-y-1.5">
@@ -324,7 +387,9 @@ function TripsPage() {
             {step < STEPS.length - 1 ? (
               <Button variant="vp" onClick={handleNext}>Próximo <ChevronRight className="h-4 w-4 ml-1" /></Button>
             ) : (
-              <Button variant="vp" onClick={handleSubmit}><Plane className="h-4 w-4 mr-1" /> Enviar Requisição</Button>
+              <Button variant="vp" onClick={() => void handleSubmit()} disabled={isSubmitting}>
+                <Plane className="h-4 w-4 mr-1" /> {isSubmitting ? "Enviando..." : "Enviar Requisição"}
+              </Button>
             )}
           </DialogFooter>
         </DialogContent>

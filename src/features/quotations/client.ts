@@ -1,14 +1,9 @@
 import { supabaseBrowser } from "@/lib/supabase-browser";
 import type { QuotationQueueItem, SupplierEntry } from "@/features/quotations/api";
+import { getApprovalLevelForValue } from "@/lib/approval";
 
 type WinCriteria = "price" | "deadline" | "price_deadline";
 type QuotationStatus = "pending" | "quoting" | "awaiting_proposals" | "selecting_winner" | "completed";
-
-function getApprovalLevel(totalValue: number): 1 | 2 | 3 {
-  if (totalValue <= 1500) return 1;
-  if (totalValue <= 3000) return 2;
-  return 3;
-}
 
 function mapQuotationStatus(requisitionStatus: string, quotationStatus?: QuotationStatus | null): QuotationStatus {
   if (quotationStatus) return quotationStatus;
@@ -273,7 +268,7 @@ export async function finalizeQuotationClient(
     .upsert({
       requisition_id: requisitionId,
       quotation_id: quotationId,
-      approval_level: getApprovalLevel(winner.price),
+      approval_level: getApprovalLevelForValue(winner.price),
       total_value: winner.price,
       decision: "pending",
     })
@@ -303,7 +298,7 @@ export async function finalizeQuotationClient(
     old_status: requisition.status,
     new_status: "APROVAÇÃO",
     details: {
-      approval_level: getApprovalLevel(winner.price),
+      approval_level: getApprovalLevelForValue(winner.price),
       total_value: winner.price,
     },
   });

@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
-  Key, Plus, ChevronRight, ChevronLeft, CalendarIcon, Cog, ClipboardList,
+  Key, Plus, ChevronRight, ChevronLeft, CalendarIcon, Cog, ClipboardList, AlertTriangle,
 } from "lucide-react";
 import { format, differenceInCalendarDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -18,18 +18,20 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { TicketsTable, type TicketRow } from "@/components/tickets-table";
+import { supabaseBrowser } from "@/lib/supabase-browser";
+import { useAuth } from "@/features/auth/auth-context";
 import { toast } from "sonner";
-
-const sampleTickets: TicketRow[] = [
-  { id: "M6-000012", title: "Guindaste 20t — Linha Produção", requester: "Pedro Santos", urgency: "HIGH", status: "APROVAÇÃO", date: "26/04" },
-];
 
 const EQUIPMENT_CATEGORIES = [
   { value: "GUINDASTE", label: "Guindaste" },
   { value: "PLATAFORMA", label: "Plataforma Elevatória" },
+  { value: "ANDAIME", label: "Andaime Tubular" },
+  { value: "BETONEIRA", label: "Betoneira" },
+  { value: "ESCAVADEIRA", label: "Escavadeira / Retroescavadeira" },
   { value: "GERADOR", label: "Gerador" },
   { value: "COMPRESSOR", label: "Compressor" },
-  { value: "VEICULO", label: "Veículo" },
+  { value: "CAMINHAO", label: "Caminhão" },
+  { value: "VEICULO", label: "Veículo Leve" },
   { value: "OUTRO", label: "Outro" },
 ];
 
@@ -46,6 +48,8 @@ const STEPS = [
   { label: "Justificativa", icon: ClipboardList },
 ];
 
+const LONG_RENTAL_DAYS = 30;
+
 export const Route = createFileRoute("/rental")({
   head: () => ({
     meta: [
@@ -57,8 +61,11 @@ export const Route = createFileRoute("/rental")({
 });
 
 function RentalPage() {
+  const { session, profile, user } = useAuth();
+  const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [step, setStep] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [equipmentName, setEquipmentName] = useState("");
   const [category, setCategory] = useState("");
@@ -77,6 +84,28 @@ function RentalPage() {
     return 0;
   }, [startDate, endDate]);
 
+  const isLongRental = rentalDays > LONG_RENTAL_DAYS;
+
+  const loadTickets = async () => {
+    if (!session) return;
+    const { data } = await supabaseBrowser
+      .from("requisitions")
+      .select("ticket_number,title,requester_name,urgency,status,created_at")
+      .eq("module", "M6")
+      .order("created_at", { ascending: false })
+      .limit(20);
+    setTickets((data ?? []).map((item) => ({
+      id: item.ticket_number,
+      title: item.title,
+      requester: item.requester_name,
+      urgency: item.urgency as TicketRow["urgency"],
+      status: item.status as TicketRow["status"],
+      date: new Date(item.created_at).toLocaleDateString("pt-BR"),
+    })));
+  };
+
+  useEffect(() => { void loadTickets(); }, [session]);
+
   const resetForm = () => {
     setStep(0);
     setEquipmentName(""); setCategory(""); setSpecs(""); setQuantity("1");
@@ -93,23 +122,64 @@ function RentalPage() {
     if (step === 1) {
       if (!startDate) { toast.error("Informe a data de início."); return false; }
       if (!endDate) { toast.error("Informe a data de término."); return false; }
-      if (endDate <= startDate) { toast.error("Data de término deve ser posterior ao início."); return false; }
+      if (endDate < startDate) { toast.error("Data de término deve ser igual ou posterior ao início."); return false; }
       if (!deliveryLocation.trim()) { toast.error("Informe o local de entrega."); return false; }
     }
     if (step === 2) {
       if (!urgencyLevel) { toast.error("Selecione o nível de urgência."); return false; }
       if (justification.length < 10) { toast.error("Justificativa deve ter pelo menos 10 caracteres."); return false; }
+      if (isLongRental && justification.length < 50) {
+        toast.error("Locação acima de 30 dias requer justificativa detalhada (mín. 50 caracteres)."); return false;
+      }
     }
     return true;
   };
 
   const handleNext = () => { if (validateStep()) setStep((s) => Math.min(s + 1, STEPS.length - 1)); };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!validateStep()) return;
-    toast.success("Requisição de locação criada!", { description: `${equipmentName} — ${rentalDays} dia(s)` });
-    setDialogOpen(false);
-    resetForm();
+    setIsSubmitting(true);
+    try {
+      const { data, error } = await supabaseBrowser
+        .from("requisitions")
+        .insert({
+          module: "M6",
+          title: `Locação ${equipmentName} — ${rentalDays} dia(s)`,
+          description: justification,
+          justification,
+          urgency: urgencyLevel,
+          desired_date: startDate?.toISOString().slice(0, 10) ?? null,
+          requester_name: profile?.full_name || user?.email || "Usuário VP",
+          requester_email: profile?.email || user?.email || "",
+          requester_department: profile?.department || "Não informado",
+          requester_profile_id: user?.id ?? null,
+          module_data: {
+            equipment_name: equipmentName,
+            category,
+            specs,
+            quantity: parseInt(quantity),
+            start_date: startDate?.toISOString().slice(0, 10),
+            end_date: endDate?.toISOString().slice(0, 10),
+            rental_days: rentalDays,
+            delivery_location: deliveryLocation,
+            long_rental: isLongRental,
+          },
+        })
+        .select("ticket_number")
+        .single();
+
+      if (error) throw error;
+      toast.success("Requisição de locação criada!", { description: (data as { ticket_number: string }).ticket_number });
+      setDialogOpen(false);
+      resetForm();
+      await loadTickets();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : (err as { message?: string })?.message ?? "Não foi possível criar a requisição agora.";
+      toast.error(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -130,7 +200,7 @@ function RentalPage() {
       </div>
 
       <TicketsTable
-        tickets={sampleTickets}
+        tickets={tickets}
         emptyIcon={<Key className="h-12 w-12 mx-auto text-muted-foreground/40 mb-4" />}
         emptyMessage="Nenhuma requisição de locação ainda."
       />
@@ -165,7 +235,7 @@ function RentalPage() {
             <div className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Nome do Equipamento *</label>
-                <Input placeholder="Ex.: Guindaste 20 toneladas" value={equipmentName} onChange={(e) => setEquipmentName(e.target.value)} maxLength={200} />
+                <Input placeholder="Ex.: Andaime Tubular 5m x 2m" value={equipmentName} onChange={(e) => setEquipmentName(e.target.value)} maxLength={200} />
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Categoria *</label>
@@ -178,7 +248,7 @@ function RentalPage() {
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Especificações Técnicas</label>
-                <Textarea placeholder="Capacidade, potência, requisitos especiais..." value={specs} onChange={(e) => setSpecs(e.target.value)} rows={2} />
+                <Textarea placeholder="Capacidade, potência, dimensões, requisitos especiais..." value={specs} onChange={(e) => setSpecs(e.target.value)} rows={2} />
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Quantidade *</label>
@@ -221,9 +291,23 @@ function RentalPage() {
                   </Popover>
                 </div>
               </div>
+
               {startDate && endDate && rentalDays > 0 && (
-                <p className="text-sm text-muted-foreground">Período: <span className="font-semibold text-foreground">{rentalDays} dia(s)</span></p>
+                <div className={cn(
+                  "rounded-lg border p-3 text-sm",
+                  isLongRental ? "border-orange-300 bg-orange-50 text-orange-700" : "border-border bg-muted/30 text-muted-foreground"
+                )}>
+                  {isLongRental ? (
+                    <p className="flex items-center gap-1.5 font-medium">
+                      <AlertTriangle className="h-4 w-4" />
+                      Locação longa: <strong>{rentalDays} dias</strong> — requer contrato especial e justificativa detalhada
+                    </p>
+                  ) : (
+                    <p>Período: <span className="font-semibold text-foreground">{rentalDays} dia(s)</span></p>
+                  )}
+                </div>
               )}
+
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Local de Entrega *</label>
                 <Input placeholder="Endereço, obra, setor" value={deliveryLocation} onChange={(e) => setDeliveryLocation(e.target.value)} />
@@ -251,9 +335,21 @@ function RentalPage() {
                 </div>
               </div>
               <div className="space-y-1.5">
-                <label className="text-sm font-medium">Justificativa *</label>
-                <Textarea placeholder="Por que a locação é necessária? Alternativas consideradas..." value={justification} onChange={(e) => setJustification(e.target.value)} rows={3} maxLength={500} />
-                <p className="text-[11px] text-muted-foreground">{justification.length}/500</p>
+                <label className="text-sm font-medium">
+                  Justificativa *
+                  {isLongRental && <span className="text-orange-600 ml-1">(mín. 50 caracteres — locação longa)</span>}
+                </label>
+                <Textarea
+                  placeholder={isLongRental
+                    ? "Locação longa: justifique a necessidade, alternativas consideradas e aprovação gerencial..."
+                    : "Por que a locação é necessária? Alternativas consideradas..."
+                  }
+                  value={justification}
+                  onChange={(e) => setJustification(e.target.value)}
+                  rows={3}
+                  maxLength={500}
+                />
+                <p className="text-[11px] text-muted-foreground">{justification.length}/500{isLongRental && " (mín. 50)"}</p>
               </div>
             </div>
           )}
@@ -265,7 +361,9 @@ function RentalPage() {
             {step < STEPS.length - 1 ? (
               <Button variant="vp" onClick={handleNext}>Próximo <ChevronRight className="h-4 w-4 ml-1" /></Button>
             ) : (
-              <Button variant="vp" onClick={handleSubmit}><Key className="h-4 w-4 mr-1" /> Enviar Requisição</Button>
+              <Button variant="vp" onClick={() => void handleSubmit()} disabled={isSubmitting}>
+                <Key className="h-4 w-4 mr-1" /> {isSubmitting ? "Enviando..." : "Enviar Requisição"}
+              </Button>
             )}
           </DialogFooter>
         </DialogContent>

@@ -22,16 +22,11 @@ import {
   rejectRequisitionClient,
 } from "@/features/approvals/client";
 import { useAuth } from "@/features/auth/auth-context";
+import { APPROVAL_LEVEL_LABELS, APPROVAL_LEVEL_SHORT_LABELS } from "@/lib/approval";
 
 export const Route = createFileRoute("/approval")({
   component: ApprovalPage,
 });
-
-const approvalLevelLabel: Record<number, string> = {
-  1: "Nível 1 — até R$ 1.500,00",
-  2: "Nível 2 — R$ 1.500,01 a R$ 3.000,00",
-  3: "Nível 3 — acima de R$ 3.000,01",
-};
 
 const approvalLevelBadge: Record<number, string> = {
   1: "bg-green-100 text-green-700 border-green-200",
@@ -128,9 +123,7 @@ function ApprovalPage() {
               <CardContent className="p-4 text-center">
                 <p className="text-2xl font-bold text-foreground">{count}</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {level === 1 && "Nível 1 (até R$ 1.500)"}
-                  {level === 2 && "Nível 2 (R$ 1.500–3.000)"}
-                  {level === 3 && "Nível 3 (acima R$ 3.000)"}
+                  {APPROVAL_LEVEL_SHORT_LABELS[level as 1 | 2 | 3]}
                 </p>
               </CardContent>
             </Card>
@@ -195,8 +188,8 @@ function ApprovalPage() {
               <DialogHeader>
                 <DialogTitle className="text-lg flex items-center gap-2">
                   Aprovação — {selected.id}
-                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${approvalLevelBadge[selected.approvalLevel]}`}>
-                    {approvalLevelLabel[selected.approvalLevel]}
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${approvalLevelBadge[selected.approvalLevel]}`}>
+                    {APPROVAL_LEVEL_LABELS[selected.approvalLevel]}
                   </span>
                 </DialogTitle>
                 <p className="text-sm text-muted-foreground">

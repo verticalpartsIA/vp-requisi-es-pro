@@ -92,7 +92,9 @@ function ProtectedApp() {
     );
   }
 
-  if (!session && currentPath !== "/login") {
+  const isPublicRoute = currentPath === "/login" || currentPath === "/reset-password";
+
+  if (!session && !isPublicRoute) {
     return <Navigate to="/login" search={{ redirect: currentPath }} />;
   }
 
@@ -100,7 +102,7 @@ function ProtectedApp() {
     return <Navigate to="/" />;
   }
 
-  if (currentPath === "/login") {
+  if (isPublicRoute) {
     return <Outlet />;
   }
 

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   HardHat, Plus, ChevronRight, ChevronLeft, Cog, AlertTriangle, ClipboardList,
 } from "lucide-react";
@@ -15,15 +15,9 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { TicketsTable, type TicketRow } from "@/components/tickets-table";
+import { supabaseBrowser } from "@/lib/supabase-browser";
+import { useAuth } from "@/features/auth/auth-context";
 import { toast } from "sonner";
-
-const sampleTickets: TicketRow[] = [
-  { id: "M4-000031", title: "Prensa Hidráulica — Vazamento", requester: "Carlos Mota", urgency: "URGENT", status: "ABERTO", date: "25/04" },
-  { id: "M4-000030", title: "Esteira Transportadora — Rolamento", requester: "André Lopes", urgency: "HIGH", status: "COTAÇÃO", date: "24/04" },
-  { id: "M4-000029", title: "Compressor Ar — Preventiva", requester: "Rita Gomes", urgency: "MEDIUM", status: "COMPRA", date: "22/04" },
-  { id: "M4-000028", title: "CNC Torno — Troca Ferramenta", requester: "Felipe Dias", urgency: "HIGH", status: "RECEBIMENTO", date: "20/04" },
-  { id: "M4-000027", title: "Ponte Rolante — Inspeção NR-11", requester: "Jorge Nunes", urgency: "LOW", status: "CONCLUÍDO", date: "18/04" },
-];
 
 const MAINTENANCE_TYPES = [
   { value: "CORRETIVA", label: "Corretiva" },
@@ -55,8 +49,11 @@ export const Route = createFileRoute("/maintenance")({
 });
 
 function MaintenancePage() {
+  const { session, profile, user } = useAuth();
+  const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [step, setStep] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [equipmentName, setEquipmentName] = useState("");
   const [equipmentTag, setEquipmentTag] = useState("");
@@ -68,6 +65,32 @@ function MaintenancePage() {
 
   const [urgencyLevel, setUrgencyLevel] = useState("");
   const [justification, setJustification] = useState("");
+
+  const loadTickets = async () => {
+    if (!session) return;
+    const { data } = await supabaseBrowser
+      .from("requisitions")
+      .select("ticket_number,title,requester_name,urgency,status,created_at")
+      .eq("module", "M4")
+      .order("created_at", { ascending: false })
+      .limit(20);
+    setTickets((data ?? []).map((item) => ({
+      id: item.ticket_number,
+      title: item.title,
+      requester: item.requester_name,
+      urgency: item.urgency as TicketRow["urgency"],
+      status: item.status as TicketRow["status"],
+      date: new Date(item.created_at).toLocaleDateString("pt-BR"),
+    })));
+  };
+
+  useEffect(() => { void loadTickets(); }, [session]);
+
+  // Quando máquina está parada, eleva urgência automaticamente
+  const handleMachineDown = (checked: boolean) => {
+    setMachineDown(checked);
+    if (checked) setUrgencyLevel("URGENT");
+  };
 
   const resetForm = () => {
     setStep(0);
@@ -94,11 +117,45 @@ function MaintenancePage() {
 
   const handleNext = () => { if (validateStep()) setStep((s) => Math.min(s + 1, STEPS.length - 1)); };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!validateStep()) return;
-    toast.success("Requisição de manutenção criada!", { description: equipmentName });
-    setDialogOpen(false);
-    resetForm();
+    setIsSubmitting(true);
+    try {
+      const { data, error } = await supabaseBrowser
+        .from("requisitions")
+        .insert({
+          module: "M4",
+          title: `${equipmentName}${equipmentTag ? ` (${equipmentTag})` : ""} — ${maintenanceType}`,
+          description: problemDescription,
+          justification,
+          urgency: urgencyLevel,
+          desired_date: null,
+          requester_name: profile?.full_name || user?.email || "Usuário VP",
+          requester_email: profile?.email || user?.email || "",
+          requester_department: profile?.department || "Não informado",
+          requester_profile_id: user?.id ?? null,
+          module_data: {
+            equipment_name: equipmentName,
+            equipment_tag: equipmentTag,
+            sector,
+            maintenance_type: maintenanceType,
+            machine_down: machineDown,
+          },
+        })
+        .select("ticket_number")
+        .single();
+
+      if (error) throw error;
+      toast.success("Requisição de manutenção criada!", { description: (data as { ticket_number: string }).ticket_number });
+      setDialogOpen(false);
+      resetForm();
+      await loadTickets();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : (err as { message?: string })?.message ?? "Não foi possível criar a requisição agora.";
+      toast.error(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -119,7 +176,7 @@ function MaintenancePage() {
       </div>
 
       <TicketsTable
-        tickets={sampleTickets}
+        tickets={tickets}
         emptyIcon={<HardHat className="h-12 w-12 mx-auto text-muted-foreground/40 mb-4" />}
         emptyMessage="Nenhuma requisição de manutenção ainda."
       />
@@ -188,9 +245,9 @@ function MaintenancePage() {
               <div className="flex items-center justify-between rounded-lg border-2 border-red-200 bg-red-50 p-4">
                 <div>
                   <label className="text-sm font-medium text-red-700">Máquina Parada?</label>
-                  <p className="text-xs text-red-600">Marque se o equipamento está inoperante</p>
+                  <p className="text-xs text-red-600">Marque se o equipamento está inoperante — urgência será elevada para URGENTE automaticamente</p>
                 </div>
-                <Switch checked={machineDown} onCheckedChange={setMachineDown} />
+                <Switch checked={machineDown} onCheckedChange={handleMachineDown} />
               </div>
             </div>
           )}
@@ -199,6 +256,13 @@ function MaintenancePage() {
             <div className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Nível de Urgência *</label>
+                {machineDown && (
+                  <div className="rounded-lg border-2 border-red-300 bg-red-50 p-3 mb-2">
+                    <p className="text-xs font-medium text-red-700 flex items-center gap-1">
+                      <AlertTriangle className="h-3.5 w-3.5" /> Máquina parada — urgência elevada automaticamente para URGENTE
+                    </p>
+                  </div>
+                )}
                 <div className="grid grid-cols-4 gap-2">
                   {URGENCY.map((u) => (
                     <button key={u.value} type="button" onClick={() => setUrgencyLevel(u.value)}
@@ -214,13 +278,6 @@ function MaintenancePage() {
                   ))}
                 </div>
               </div>
-              {machineDown && (
-                <div className="rounded-lg border-2 border-red-300 bg-red-50 p-3">
-                  <p className="text-xs font-medium text-red-700 flex items-center gap-1">
-                    <AlertTriangle className="h-3.5 w-3.5" /> Equipamento parado — prioridade elevada automaticamente
-                  </p>
-                </div>
-              )}
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Justificativa *</label>
                 <Textarea placeholder="Impacto na produção, riscos de segurança..." value={justification} onChange={(e) => setJustification(e.target.value)} rows={3} maxLength={500} />
@@ -236,7 +293,9 @@ function MaintenancePage() {
             {step < STEPS.length - 1 ? (
               <Button variant="vp" onClick={handleNext}>Próximo <ChevronRight className="h-4 w-4 ml-1" /></Button>
             ) : (
-              <Button variant="vp" onClick={handleSubmit}><HardHat className="h-4 w-4 mr-1" /> Enviar Requisição</Button>
+              <Button variant="vp" onClick={() => void handleSubmit()} disabled={isSubmitting}>
+                <HardHat className="h-4 w-4 mr-1" /> {isSubmitting ? "Enviando..." : "Enviar Requisição"}
+              </Button>
             )}
           </DialogFooter>
         </DialogContent>

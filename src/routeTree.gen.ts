@@ -11,9 +11,9 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TripsRouteImport } from './routes/trips'
 import { Route as ServicesRouteImport } from './routes/services'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as RentalRouteImport } from './routes/rental'
 import { Route as ReceiptRouteImport } from './routes/receipt'
-import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as QuotingRouteImport } from './routes/quoting'
 import { Route as PurchasingRouteImport } from './routes/purchasing'
 import { Route as ProductsRouteImport } from './routes/products'
@@ -37,6 +37,11 @@ const ServicesRoute = ServicesRouteImport.update({
   path: '/services',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RentalRoute = RentalRouteImport.update({
   id: '/rental',
   path: '/rental',
@@ -45,11 +50,6 @@ const RentalRoute = RentalRouteImport.update({
 const ReceiptRoute = ReceiptRouteImport.update({
   id: '/receipt',
   path: '/receipt',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ResetPasswordRoute = ResetPasswordRouteImport.update({
-  id: '/reset-password',
-  path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const QuotingRoute = QuotingRouteImport.update({
@@ -127,8 +127,8 @@ export interface FileRoutesByFullPath {
   '/purchasing': typeof PurchasingRoute
   '/quoting': typeof QuotingRoute
   '/receipt': typeof ReceiptRoute
-  '/reset-password': typeof ResetPasswordRoute
   '/rental': typeof RentalRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/services': typeof ServicesRoute
   '/trips': typeof TripsRoute
 }
@@ -146,8 +146,8 @@ export interface FileRoutesByTo {
   '/purchasing': typeof PurchasingRoute
   '/quoting': typeof QuotingRoute
   '/receipt': typeof ReceiptRoute
-  '/reset-password': typeof ResetPasswordRoute
   '/rental': typeof RentalRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/services': typeof ServicesRoute
   '/trips': typeof TripsRoute
 }
@@ -166,8 +166,8 @@ export interface FileRoutesById {
   '/purchasing': typeof PurchasingRoute
   '/quoting': typeof QuotingRoute
   '/receipt': typeof ReceiptRoute
-  '/reset-password': typeof ResetPasswordRoute
   '/rental': typeof RentalRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/services': typeof ServicesRoute
   '/trips': typeof TripsRoute
 }
@@ -187,8 +187,8 @@ export interface FileRouteTypes {
     | '/purchasing'
     | '/quoting'
     | '/receipt'
-    | '/reset-password'
     | '/rental'
+    | '/reset-password'
     | '/services'
     | '/trips'
   fileRoutesByTo: FileRoutesByTo
@@ -206,8 +206,8 @@ export interface FileRouteTypes {
     | '/purchasing'
     | '/quoting'
     | '/receipt'
-    | '/reset-password'
     | '/rental'
+    | '/reset-password'
     | '/services'
     | '/trips'
   id:
@@ -225,8 +225,8 @@ export interface FileRouteTypes {
     | '/purchasing'
     | '/quoting'
     | '/receipt'
-    | '/reset-password'
     | '/rental'
+    | '/reset-password'
     | '/services'
     | '/trips'
   fileRoutesById: FileRoutesById
@@ -245,8 +245,8 @@ export interface RootRouteChildren {
   PurchasingRoute: typeof PurchasingRoute
   QuotingRoute: typeof QuotingRoute
   ReceiptRoute: typeof ReceiptRoute
-  ResetPasswordRoute: typeof ResetPasswordRoute
   RentalRoute: typeof RentalRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
   ServicesRoute: typeof ServicesRoute
   TripsRoute: typeof TripsRoute
 }
@@ -267,6 +267,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ServicesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/rental': {
       id: '/rental'
       path: '/rental'
@@ -279,13 +286,6 @@ declare module '@tanstack/react-router' {
       path: '/receipt'
       fullPath: '/receipt'
       preLoaderRoute: typeof ReceiptRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/reset-password': {
-      id: '/reset-password'
-      path: '/reset-password'
-      fullPath: '/reset-password'
-      preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/quoting': {
@@ -389,8 +389,8 @@ const rootRouteChildren: RootRouteChildren = {
   PurchasingRoute: PurchasingRoute,
   QuotingRoute: QuotingRoute,
   ReceiptRoute: ReceiptRoute,
-  ResetPasswordRoute: ResetPasswordRoute,
   RentalRoute: RentalRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
   ServicesRoute: ServicesRoute,
   TripsRoute: TripsRoute,
 }

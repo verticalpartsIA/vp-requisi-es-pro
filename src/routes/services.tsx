@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
-  Wrench, Plus, ChevronRight, ChevronLeft, FileText, CalendarIcon, ClipboardList,
+  Wrench, Plus, ChevronRight, ChevronLeft, FileText, CalendarIcon, ClipboardList, Trash2,
 } from "lucide-react";
 import { format, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -18,14 +18,9 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { TicketsTable, type TicketRow } from "@/components/tickets-table";
+import { supabaseBrowser } from "@/lib/supabase-browser";
+import { useAuth } from "@/features/auth/auth-context";
 import { toast } from "sonner";
-
-const sampleTickets: TicketRow[] = [
-  { id: "M3-000018", title: "Consultoria ERP Financeiro", requester: "Roberto Alves", urgency: "LOW", status: "COTAÇÃO", date: "22/04" },
-  { id: "M3-000017", title: "Manutenção Ar Condicionado", requester: "Lucia Ramos", urgency: "MEDIUM", status: "COMPRA", date: "20/04" },
-  { id: "M3-000016", title: "Auditoria ISO 9001", requester: "Paulo Souza", urgency: "HIGH", status: "APROVAÇÃO", date: "18/04" },
-  { id: "M3-000015", title: "Limpeza Industrial Anual", requester: "Marcos Reis", urgency: "MEDIUM", status: "CONCLUÍDO", date: "15/04" },
-];
 
 const SERVICE_TYPES = [
   { value: "CONSULTORIA", label: "Consultoria" },
@@ -33,6 +28,8 @@ const SERVICE_TYPES = [
   { value: "PROJETO", label: "Projeto" },
   { value: "AUDITORIA", label: "Auditoria" },
   { value: "LIMPEZA", label: "Limpeza" },
+  { value: "TI", label: "TI / Tecnologia" },
+  { value: "JURIDICO", label: "Jurídico" },
   { value: "OUTRO", label: "Outro" },
 ];
 
@@ -45,9 +42,14 @@ const URGENCY = [
 
 const STEPS = [
   { label: "Serviço", icon: Wrench },
-  { label: "Detalhes", icon: FileText },
+  { label: "Escopo", icon: FileText },
   { label: "Prazo", icon: ClipboardList },
 ];
+
+interface Milestone {
+  description: string;
+  percentage: number;
+}
 
 export const Route = createFileRoute("/services")({
   head: () => ({
@@ -60,25 +62,69 @@ export const Route = createFileRoute("/services")({
 });
 
 function ServicesPage() {
+  const { session, profile, user } = useAuth();
+  const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [step, setStep] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Step 0 — Serviço
   const [serviceName, setServiceName] = useState("");
   const [serviceType, setServiceType] = useState("");
   const [description, setDescription] = useState("");
+  const [preNegotiatedPrice, setPreNegotiatedPrice] = useState("");
 
+  // Step 1 — Escopo
   const [scopeOfWork, setScopeOfWork] = useState("");
   const [deliverables, setDeliverables] = useState("");
   const [executionLocation, setExecutionLocation] = useState("");
+  const [measurementCriteria, setMeasurementCriteria] = useState("");
+  const [milestones, setMilestones] = useState<Milestone[]>([{ description: "", percentage: 100 }]);
 
+  // Step 2 — Prazo
   const [deadline, setDeadline] = useState<Date | undefined>();
   const [urgencyLevel, setUrgencyLevel] = useState("");
   const [justification, setJustification] = useState("");
 
+  const loadTickets = async () => {
+    if (!session) return;
+    const { data } = await supabaseBrowser
+      .from("requisitions")
+      .select("ticket_number,title,requester_name,urgency,status,created_at")
+      .eq("module", "M3")
+      .order("created_at", { ascending: false })
+      .limit(20);
+    setTickets((data ?? []).map((item) => ({
+      id: item.ticket_number,
+      title: item.title,
+      requester: item.requester_name,
+      urgency: item.urgency as TicketRow["urgency"],
+      status: item.status as TicketRow["status"],
+      date: new Date(item.created_at).toLocaleDateString("pt-BR"),
+    })));
+  };
+
+  useEffect(() => { void loadTickets(); }, [session]);
+
+  const totalPercentage = milestones.reduce((sum, m) => sum + (Number(m.percentage) || 0), 0);
+
+  const addMilestone = () => {
+    setMilestones((prev) => [...prev, { description: "", percentage: 0 }]);
+  };
+
+  const removeMilestone = (idx: number) => {
+    setMilestones((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const updateMilestone = (idx: number, field: keyof Milestone, value: string | number) => {
+    setMilestones((prev) => prev.map((m, i) => i === idx ? { ...m, [field]: value } : m));
+  };
+
   const resetForm = () => {
     setStep(0);
-    setServiceName(""); setServiceType(""); setDescription("");
-    setScopeOfWork(""); setDeliverables(""); setExecutionLocation("");
+    setServiceName(""); setServiceType(""); setDescription(""); setPreNegotiatedPrice("");
+    setScopeOfWork(""); setDeliverables(""); setExecutionLocation(""); setMeasurementCriteria("");
+    setMilestones([{ description: "", percentage: 100 }]);
     setDeadline(undefined); setUrgencyLevel(""); setJustification("");
   };
 
@@ -90,6 +136,12 @@ function ServicesPage() {
     }
     if (step === 1) {
       if (scopeOfWork.length < 10) { toast.error("Escopo deve ter pelo menos 10 caracteres."); return false; }
+      const hasEmptyMilestone = milestones.some((m) => !m.description.trim());
+      if (hasEmptyMilestone) { toast.error("Preencha a descrição de todos os marcos."); return false; }
+      if (milestones.length > 0 && totalPercentage !== 100) {
+        toast.error(`A soma dos percentuais dos marcos deve ser 100% (atual: ${totalPercentage}%).`);
+        return false;
+      }
     }
     if (step === 2) {
       if (!deadline) { toast.error("Informe o prazo desejado."); return false; }
@@ -101,11 +153,47 @@ function ServicesPage() {
 
   const handleNext = () => { if (validateStep()) setStep((s) => Math.min(s + 1, STEPS.length - 1)); };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!validateStep()) return;
-    toast.success("Requisição de serviço criada!", { description: serviceName });
-    setDialogOpen(false);
-    resetForm();
+    setIsSubmitting(true);
+    try {
+      const { data, error } = await supabaseBrowser
+        .from("requisitions")
+        .insert({
+          module: "M3",
+          title: `${serviceName} (${SERVICE_TYPES.find((t) => t.value === serviceType)?.label ?? serviceType})`,
+          description,
+          justification,
+          urgency: urgencyLevel,
+          desired_date: deadline?.toISOString().slice(0, 10) ?? null,
+          requester_name: profile?.full_name || user?.email || "Usuário VP",
+          requester_email: profile?.email || user?.email || "",
+          requester_department: profile?.department || "Não informado",
+          requester_profile_id: user?.id ?? null,
+          module_data: {
+            service_type: serviceType,
+            scope_of_work: scopeOfWork,
+            deliverables,
+            execution_location: executionLocation,
+            measurement_criteria: measurementCriteria,
+            pre_negotiated_price: preNegotiatedPrice ? parseFloat(preNegotiatedPrice.replace(",", ".")) : null,
+            milestones: milestones.length > 0 ? milestones : null,
+          },
+        })
+        .select("ticket_number")
+        .single();
+
+      if (error) throw error;
+      toast.success("Requisição de serviço criada!", { description: (data as { ticket_number: string }).ticket_number });
+      setDialogOpen(false);
+      resetForm();
+      await loadTickets();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : (err as { message?: string })?.message ?? "Não foi possível criar a requisição agora.";
+      toast.error(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const minDate = addDays(new Date(), 3);
@@ -128,7 +216,7 @@ function ServicesPage() {
       </div>
 
       <TicketsTable
-        tickets={sampleTickets}
+        tickets={tickets}
         emptyIcon={<Wrench className="h-12 w-12 mx-auto text-muted-foreground/40 mb-4" />}
         emptyMessage="Nenhuma requisição de serviço ainda."
       />
@@ -163,7 +251,7 @@ function ServicesPage() {
             <div className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Nome do Serviço *</label>
-                <Input placeholder="Ex.: Manutenção Preventiva Ar Condicionado" value={serviceName} onChange={(e) => setServiceName(e.target.value)} maxLength={200} />
+                <Input placeholder="Ex.: Consultoria ERP Financeiro" value={serviceName} onChange={(e) => setServiceName(e.target.value)} maxLength={200} />
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Tipo de Serviço *</label>
@@ -179,6 +267,18 @@ function ServicesPage() {
                 <Textarea placeholder="Descreva o serviço, contexto e necessidade..." value={description} onChange={(e) => setDescription(e.target.value)} rows={3} maxLength={1000} />
                 <p className="text-[11px] text-muted-foreground">{description.length}/1000</p>
               </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Valor Pré-Negociado (R$)</label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="Ex.: 12000 (deixe em branco se não houver)"
+                  value={preNegotiatedPrice}
+                  onChange={(e) => setPreNegotiatedPrice(e.target.value)}
+                />
+                <p className="text-[11px] text-muted-foreground">Preencha se já houver um valor acordado com o fornecedor.</p>
+              </div>
             </div>
           )}
 
@@ -190,11 +290,63 @@ function ServicesPage() {
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Entregáveis Esperados</label>
-                <Textarea placeholder="Relatório, laudo, execução concluída..." value={deliverables} onChange={(e) => setDeliverables(e.target.value)} rows={2} />
+                <Textarea placeholder="Relatório, laudo técnico, execução concluída..." value={deliverables} onChange={(e) => setDeliverables(e.target.value)} rows={2} maxLength={500} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Critério de Medição / Aceite</label>
+                <Input placeholder="Ex.: Aprovação do laudo pela Engenharia" value={measurementCriteria} onChange={(e) => setMeasurementCriteria(e.target.value)} maxLength={300} />
+                <p className="text-[11px] text-muted-foreground">Como será verificado que o serviço foi concluído com êxito?</p>
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Local de Execução</label>
-                <Input placeholder="Endereço, setor, área" value={executionLocation} onChange={(e) => setExecutionLocation(e.target.value)} />
+                <Input placeholder="Ex.: Planta SP — Linha 3, Usinagem" value={executionLocation} onChange={(e) => setExecutionLocation(e.target.value)} />
+              </div>
+
+              {/* Milestones */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium">Marcos de Pagamento</label>
+                  <span className={cn("text-xs font-medium px-2 py-0.5 rounded-full",
+                    totalPercentage === 100 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700")}>
+                    Total: {totalPercentage}%
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">Divida o pagamento em marcos. A soma dos percentuais deve ser 100%.</p>
+                <div className="space-y-2">
+                  {milestones.map((m, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <Input
+                        className="flex-1"
+                        placeholder={`Marco ${idx + 1} — Ex.: Entrega do relatório`}
+                        value={m.description}
+                        onChange={(e) => updateMilestone(idx, "description", e.target.value)}
+                        maxLength={200}
+                      />
+                      <div className="flex items-center gap-1 w-28 shrink-0">
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          className="w-16 text-center"
+                          value={m.percentage}
+                          onChange={(e) => updateMilestone(idx, "percentage", Number(e.target.value))}
+                        />
+                        <span className="text-sm text-muted-foreground">%</span>
+                      </div>
+                      {milestones.length > 1 && (
+                        <button type="button" onClick={() => removeMilestone(idx)}
+                          className="text-muted-foreground hover:text-red-600 transition-colors shrink-0">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {milestones.length < 5 && (
+                  <Button type="button" variant="outline" size="sm" onClick={addMilestone}>
+                    <Plus className="h-3.5 w-3.5 mr-1" /> Adicionar Marco
+                  </Button>
+                )}
               </div>
             </div>
           )}
@@ -235,7 +387,7 @@ function ServicesPage() {
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Justificativa *</label>
-                <Textarea placeholder="Por que este serviço é necessário?" value={justification} onChange={(e) => setJustification(e.target.value)} rows={3} maxLength={500} />
+                <Textarea placeholder="Por que este serviço é necessário? Qual o impacto de não contratá-lo?" value={justification} onChange={(e) => setJustification(e.target.value)} rows={3} maxLength={500} />
                 <p className="text-[11px] text-muted-foreground">{justification.length}/500</p>
               </div>
             </div>
@@ -248,7 +400,9 @@ function ServicesPage() {
             {step < STEPS.length - 1 ? (
               <Button variant="vp" onClick={handleNext}>Próximo <ChevronRight className="h-4 w-4 ml-1" /></Button>
             ) : (
-              <Button variant="vp" onClick={handleSubmit}><Wrench className="h-4 w-4 mr-1" /> Enviar Requisição</Button>
+              <Button variant="vp" onClick={() => void handleSubmit()} disabled={isSubmitting}>
+                <Wrench className="h-4 w-4 mr-1" /> {isSubmitting ? "Enviando..." : "Enviar Requisição"}
+              </Button>
             )}
           </DialogFooter>
         </DialogContent>

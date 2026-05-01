@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
-  Truck, Plus, ChevronRight, ChevronLeft, MapPin, Package, CalendarIcon, ClipboardList,
+  Truck, Plus, ChevronRight, ChevronLeft, MapPin, Package, CalendarIcon, ClipboardList, ShieldCheck,
 } from "lucide-react";
 import { format, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -19,12 +19,9 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { TicketsTable, type TicketRow } from "@/components/tickets-table";
+import { supabaseBrowser } from "@/lib/supabase-browser";
+import { useAuth } from "@/features/auth/auth-context";
 import { toast } from "sonner";
-
-const sampleTickets: TicketRow[] = [
-  { id: "M5-000028", title: "Frete Chapas Aço SP→CWB", requester: "Maria Costa", urgency: "MEDIUM", status: "COMPRA", date: "24/04" },
-  { id: "M5-000027", title: "Transporte Equipamento RJ→SP", requester: "João Lima", urgency: "HIGH", status: "COTAÇÃO", date: "22/04" },
-];
 
 const VEHICLE_TYPES = [
   { value: "TRUCK", label: "Caminhão" },
@@ -47,6 +44,12 @@ const STEPS = [
   { label: "Prazo", icon: ClipboardList },
 ];
 
+const INSURANCE_RATE = 0.005; // 0,5%
+
+function formatBRL(value: number) {
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
 export const Route = createFileRoute("/freight")({
   head: () => ({
     meta: [
@@ -58,8 +61,11 @@ export const Route = createFileRoute("/freight")({
 });
 
 function FreightPage() {
+  const { session, profile, user } = useAuth();
+  const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [step, setStep] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [originAddress, setOriginAddress] = useState("");
   const [destinationAddress, setDestinationAddress] = useState("");
@@ -69,15 +75,41 @@ function FreightPage() {
   const [weight, setWeight] = useState("");
   const [dimensions, setDimensions] = useState("");
   const [fragile, setFragile] = useState(false);
+  const [declaredValue, setDeclaredValue] = useState("");
 
   const [pickupDate, setPickupDate] = useState<Date | undefined>();
   const [urgencyLevel, setUrgencyLevel] = useState("");
   const [justification, setJustification] = useState("");
 
+  const insuranceCost = useMemo(() => {
+    const val = parseFloat(declaredValue.replace(",", "."));
+    return val > 0 ? val * INSURANCE_RATE : 0;
+  }, [declaredValue]);
+
+  const loadTickets = async () => {
+    if (!session) return;
+    const { data } = await supabaseBrowser
+      .from("requisitions")
+      .select("ticket_number,title,requester_name,urgency,status,created_at")
+      .eq("module", "M5")
+      .order("created_at", { ascending: false })
+      .limit(20);
+    setTickets((data ?? []).map((item) => ({
+      id: item.ticket_number,
+      title: item.title,
+      requester: item.requester_name,
+      urgency: item.urgency as TicketRow["urgency"],
+      status: item.status as TicketRow["status"],
+      date: new Date(item.created_at).toLocaleDateString("pt-BR"),
+    })));
+  };
+
+  useEffect(() => { void loadTickets(); }, [session]);
+
   const resetForm = () => {
     setStep(0);
     setOriginAddress(""); setDestinationAddress(""); setVehicleType("");
-    setCargoDescription(""); setWeight(""); setDimensions(""); setFragile(false);
+    setCargoDescription(""); setWeight(""); setDimensions(""); setFragile(false); setDeclaredValue("");
     setPickupDate(undefined); setUrgencyLevel(""); setJustification("");
   };
 
@@ -100,11 +132,48 @@ function FreightPage() {
 
   const handleNext = () => { if (validateStep()) setStep((s) => Math.min(s + 1, STEPS.length - 1)); };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!validateStep()) return;
-    toast.success("Requisição de frete criada!", { description: `${originAddress} → ${destinationAddress}` });
-    setDialogOpen(false);
-    resetForm();
+    setIsSubmitting(true);
+    try {
+      const { data, error } = await supabaseBrowser
+        .from("requisitions")
+        .insert({
+          module: "M5",
+          title: `Frete ${originAddress} → ${destinationAddress}`,
+          description: cargoDescription,
+          justification,
+          urgency: urgencyLevel,
+          desired_date: pickupDate?.toISOString().slice(0, 10) ?? null,
+          requester_name: profile?.full_name || user?.email || "Usuário VP",
+          requester_email: profile?.email || user?.email || "",
+          requester_department: profile?.department || "Não informado",
+          requester_profile_id: user?.id ?? null,
+          module_data: {
+            origin_address: originAddress,
+            destination_address: destinationAddress,
+            vehicle_type: vehicleType,
+            weight_kg: weight ? parseFloat(weight) : null,
+            dimensions,
+            fragile,
+            declared_value: declaredValue ? parseFloat(declaredValue.replace(",", ".")) : null,
+            insurance_cost: insuranceCost || null,
+          },
+        })
+        .select("ticket_number")
+        .single();
+
+      if (error) throw error;
+      toast.success("Requisição de frete criada!", { description: (data as { ticket_number: string }).ticket_number });
+      setDialogOpen(false);
+      resetForm();
+      await loadTickets();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : (err as { message?: string })?.message ?? "Não foi possível criar a requisição agora.";
+      toast.error(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -125,7 +194,7 @@ function FreightPage() {
       </div>
 
       <TicketsTable
-        tickets={sampleTickets}
+        tickets={tickets}
         emptyIcon={<Truck className="h-12 w-12 mx-auto text-muted-foreground/40 mb-4" />}
         emptyMessage="Nenhuma requisição de frete ainda."
       />
@@ -160,11 +229,19 @@ function FreightPage() {
             <div className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Endereço de Origem *</label>
-                <Input placeholder="Cidade, estado ou endereço completo" value={originAddress} onChange={(e) => setOriginAddress(e.target.value)} />
+                <Input
+                  placeholder="Ex.: São Paulo, SP — Rua das Indústrias, 100"
+                  value={originAddress}
+                  onChange={(e) => setOriginAddress(e.target.value)}
+                />
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Endereço de Destino *</label>
-                <Input placeholder="Cidade, estado ou endereço completo" value={destinationAddress} onChange={(e) => setDestinationAddress(e.target.value)} />
+                <Input
+                  placeholder="Ex.: Curitiba, PR — Av. Cândido de Abreu, 200"
+                  value={destinationAddress}
+                  onChange={(e) => setDestinationAddress(e.target.value)}
+                />
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Tipo de Veículo *</label>
@@ -194,6 +271,25 @@ function FreightPage() {
                   <label className="text-sm font-medium">Dimensões (CxLxA)</label>
                   <Input placeholder="Ex.: 2m x 1m x 0.5m" value={dimensions} onChange={(e) => setDimensions(e.target.value)} />
                 </div>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium flex items-center gap-1.5">
+                  <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
+                  Valor Declarado da Carga (R$)
+                </label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="Ex.: 50000"
+                  value={declaredValue}
+                  onChange={(e) => setDeclaredValue(e.target.value)}
+                />
+                {insuranceCost > 0 && (
+                  <p className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded px-2 py-1">
+                    Seguro estimado (0,5%): <strong>{formatBRL(insuranceCost)}</strong>
+                  </p>
+                )}
               </div>
               <div className="flex items-center justify-between rounded-lg border p-4">
                 <div>
@@ -254,7 +350,9 @@ function FreightPage() {
             {step < STEPS.length - 1 ? (
               <Button variant="vp" onClick={handleNext}>Próximo <ChevronRight className="h-4 w-4 ml-1" /></Button>
             ) : (
-              <Button variant="vp" onClick={handleSubmit}><Truck className="h-4 w-4 mr-1" /> Enviar Requisição</Button>
+              <Button variant="vp" onClick={() => void handleSubmit()} disabled={isSubmitting}>
+                <Truck className="h-4 w-4 mr-1" /> {isSubmitting ? "Enviando..." : "Enviar Requisição"}
+              </Button>
             )}
           </DialogFooter>
         </DialogContent>

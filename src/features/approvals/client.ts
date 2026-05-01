@@ -13,15 +13,31 @@ function moduleLabel(module: string) {
 }
 
 export async function listPendingApprovalsClient() {
+  const currentUser = (await supabaseBrowser.auth.getUser()).data.user;
+  const { data: roleRows, error: roleRowsError } = await supabaseBrowser
+    .from("user_roles")
+    .select("role,approval_tier")
+    .eq("user_id", currentUser?.id || "");
+  if (roleRowsError) throw roleRowsError;
+
+  const hasAdminRole = (roleRows || []).some((item) => item.role === "admin");
+  const maxApprovalTier = Math.max(
+    0,
+    ...(roleRows || [])
+      .filter((item) => item.role === "aprovador")
+      .map((item) => item.approval_tier || 0),
+  );
+
   const { data: approvals, error: approvalsError } = await supabaseBrowser
     .from("approvals")
     .select("id,requisition_id,quotation_id,approval_level,total_value,decision")
     .eq("decision", "pending")
     .order("created_at", { ascending: true });
   if (approvalsError) throw approvalsError;
-  if (!approvals?.length) return [] satisfies ApprovalRequestItem[];
+  const filteredApprovals = (approvals || []).filter((item) => hasAdminRole || item.approval_level <= maxApprovalTier);
+  if (!filteredApprovals.length) return [] satisfies ApprovalRequestItem[];
 
-  const requisitionIds = approvals.map((item) => item.requisition_id);
+  const requisitionIds = filteredApprovals.map((item) => item.requisition_id);
   const { data: requisitions, error: requisitionsError } = await supabaseBrowser
     .from("requisitions")
     .select("id,ticket_number,module,title,justification,requester_name,status,created_at")
@@ -29,7 +45,7 @@ export async function listPendingApprovalsClient() {
     .eq("status", "APROVAÇÃO");
   if (requisitionsError) throw requisitionsError;
 
-  const quotationIds = approvals.map((item) => item.quotation_id).filter(Boolean) as string[];
+  const quotationIds = filteredApprovals.map((item) => item.quotation_id).filter(Boolean) as string[];
   const { data: quotations, error: quotationsError } = quotationIds.length === 0
     ? { data: [], error: null }
     : await supabaseBrowser.from("quotations").select("id,requisition_id,win_criteria").in("id", quotationIds);
@@ -53,7 +69,7 @@ export async function listPendingApprovalsClient() {
     suppliersByQuotation.set(supplier.quotation_id, current);
   });
 
-  return approvals
+  return filteredApprovals
     .map((approval) => {
       const requisition = requisitionById.get(approval.requisition_id);
       if (!requisition) return null;
