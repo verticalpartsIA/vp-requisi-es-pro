@@ -408,7 +408,9 @@ describe("M1 - Product Requisitions", () => {
     it("should allow selecting urgency level", async () => {
       await goToStep3();
 
-      const altaBtn = screen.getByText("Alta");
+      // "Alta" may appear in tickets table too, so get the one inside the dialog
+      const dialog = screen.getByRole("dialog");
+      const altaBtn = within(dialog).getByText("Alta");
       await user.click(altaBtn);
 
       // The button should have the orange active style
@@ -425,7 +427,8 @@ describe("M1 - Product Requisitions", () => {
       );
 
       // Select urgency
-      await user.click(screen.getByText("Alta"));
+      const dialog = screen.getByRole("dialog");
+      await user.click(within(dialog).getByText("Alta"));
 
       // Fill short justification
       const justInput = screen.getByPlaceholderText("Por que é necessário? Qual o impacto se não for comprado?");
@@ -453,7 +456,7 @@ describe("M1 - Product Requisitions", () => {
   });
 
   describe("Form Submission", () => {
-    it("should show success toast with product name on successful submit", async () => {
+    it("should validate step 3 required fields before submission", async () => {
       renderProductsPage();
       await waitFor(() => {
         expect(screen.getByText("Nova Requisição")).toBeInTheDocument();
@@ -492,9 +495,11 @@ describe("M1 - Product Requisitions", () => {
       await user.click(screen.getByText("Enviar Requisição"));
 
       // Should show date validation error
-      expect(toastMock.error).toHaveBeenCalledWith(
-        "Informe a data limite para entrega."
-      );
+      await waitFor(() => {
+        expect(toastMock.error).toHaveBeenCalledWith(
+          "Informe a data limite para entrega."
+        );
+      });
     });
   });
 
