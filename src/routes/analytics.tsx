@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   BarChart3,
   TrendingUp,
@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { Download, FileText, FileSpreadsheet, Image, GitCompareArrows, Filter, ChevronRight } from "lucide-react";
 import { DollarSign, Loader2, Check, ExternalLink, Star, OctagonAlert } from "lucide-react";
+import { Radio, Bell, ShoppingCart, AlertCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -232,6 +233,66 @@ const bottlenecks = [
   { ticket_id: "M4-000031", stage: "V2_COTAÇÃO", hours: 68, target: 24, responsible: "Ana Oliveira", role: "Cotador" },
 ];
 
+/* ── Real-time event simulation data ── */
+type WSEvent =
+  | { type: "requisition:created"; ticket_id: string; module: string; department: string; value: number; timestamp: string }
+  | { type: "sla:breach"; ticket_id: string; stage: string; target_hours: number; actual_hours: number; responsible: string }
+  | { type: "purchase:completed"; ticket_id: string; total_value: number; savings: number; cycle_time_days: number }
+  | { type: "metrics:update"; total_requests_today: number; total_value_today: number; active_bottlenecks: number; sla_compliance_rate: number };
+
+const departments = ["Engenharia", "Operações", "TI", "Administrativo", "Manutenção"];
+const modules = ["M1", "M2", "M3", "M4", "M5", "M6"];
+const stages = ["V2_COTAÇÃO", "V3_APROVAÇÃO", "V4_COMPRA", "V5_RECEBIMENTO"];
+const responsibles = ["Roberto Mendes", "Ana Oliveira", "Maria Oliveira", "João Pereira", "Fernanda Lima"];
+
+function generateRandomEvent(): WSEvent {
+  const rand = Math.random();
+  const now = new Date().toISOString();
+  if (rand < 0.45) {
+    const mod = modules[Math.floor(Math.random() * modules.length)];
+    const num = String(Math.floor(Math.random() * 900) + 100).padStart(6, "0");
+    return {
+      type: "requisition:created",
+      ticket_id: `${mod}-${num}`,
+      module: mod,
+      department: departments[Math.floor(Math.random() * departments.length)],
+      value: Math.floor(Math.random() * 50000) + 500,
+      timestamp: now,
+    };
+  } else if (rand < 0.65) {
+    const mod = modules[Math.floor(Math.random() * modules.length)];
+    const num = String(Math.floor(Math.random() * 900) + 100).padStart(6, "0");
+    const target = [24, 48, 72, 168][Math.floor(Math.random() * 4)];
+    return {
+      type: "sla:breach",
+      ticket_id: `${mod}-${num}`,
+      stage: stages[Math.floor(Math.random() * stages.length)],
+      target_hours: target,
+      actual_hours: target + Math.floor(Math.random() * 100) + 1,
+      responsible: responsibles[Math.floor(Math.random() * responsibles.length)],
+    };
+  } else if (rand < 0.85) {
+    const mod = modules[Math.floor(Math.random() * modules.length)];
+    const num = String(Math.floor(Math.random() * 900) + 100).padStart(6, "0");
+    const total = Math.floor(Math.random() * 80000) + 2000;
+    return {
+      type: "purchase:completed",
+      ticket_id: `${mod}-${num}`,
+      total_value: total,
+      savings: Math.floor(total * (Math.random() * 0.15 + 0.02)),
+      cycle_time_days: +(Math.random() * 12 + 2).toFixed(1),
+    };
+  } else {
+    return {
+      type: "metrics:update",
+      total_requests_today: Math.floor(Math.random() * 30) + 40,
+      total_value_today: Math.floor(Math.random() * 500000) + 200000,
+      active_bottlenecks: Math.floor(Math.random() * 5) + 1,
+      sla_compliance_rate: +(Math.random() * 8 + 82).toFixed(1),
+    };
+  }
+}
+
 /* ────────────────────────────────────────────────
  *  Helpers
  * ──────────────────────────────────────────────── */
@@ -291,6 +352,40 @@ function AnalyticsPage() {
   const [exportIncludeRaw, setExportIncludeRaw] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
   const [exportResult, setExportResult] = useState<{ download_url: string; expires_at: string; file_size_bytes: number; generated_at: string } | null>(null);
+
+  /* ── Real-time simulation ── */
+  const [liveEvents, setLiveEvents] = useState<(WSEvent & { _id: number })[]>([]);
+  const [liveMetrics, setLiveMetrics] = useState({
+    total_requests_today: 52,
+    total_value_today: 384_000,
+    active_bottlenecks: 3,
+    sla_compliance_rate: 87.0,
+  });
+  const [wsConnected, setWsConnected] = useState(false);
+  const eventIdRef = useRef(0);
+
+  useEffect(() => {
+    const connectDelay = setTimeout(() => setWsConnected(true), 800);
+    return () => clearTimeout(connectDelay);
+  }, []);
+
+  useEffect(() => {
+    if (!wsConnected) return;
+    const interval = setInterval(() => {
+      const evt = generateRandomEvent();
+      if (evt.type === "metrics:update") {
+        setLiveMetrics({
+          total_requests_today: evt.total_requests_today,
+          total_value_today: evt.total_value_today,
+          active_bottlenecks: evt.active_bottlenecks,
+          sla_compliance_rate: evt.sla_compliance_rate,
+        });
+      }
+      eventIdRef.current += 1;
+      setLiveEvents((prev) => [{ ...evt, _id: eventIdRef.current }, ...prev].slice(0, 20));
+    }, 3000 + Math.random() * 2000);
+    return () => clearInterval(interval);
+  }, [wsConnected]);
 
   const handleExportGenerate = async () => {
     setExportLoading(true);
@@ -1028,6 +1123,138 @@ function AnalyticsPage() {
           </div>
         </div>
       )}
+    </div>
+
+    {/* ═══ Real-time Event Feed ═══ */}
+    <div className="max-w-6xl mx-auto mt-6 space-y-4">
+      {/* Live Metrics Ticker */}
+      <Card className="card-hover-yellow overflow-hidden">
+        <CardContent className="p-0">
+          <div className="flex items-center gap-3 px-4 py-2 border-b bg-accent/30">
+            <div className="relative flex items-center gap-2">
+              <Radio className="h-4 w-4 text-emerald-500" />
+              {wsConnected && <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />}
+            </div>
+            <span className="text-xs font-semibold text-foreground">Tempo Real</span>
+            <Badge variant="outline" className={`text-[10px] ${wsConnected ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-muted text-muted-foreground"}`}>
+              {wsConnected ? "Conectado" : "Conectando..."}
+            </Badge>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 divide-x divide-border">
+            <div className="p-3 text-center">
+              <p className="text-[10px] text-muted-foreground font-medium">Requisições Hoje</p>
+              <p className="text-lg font-bold text-foreground">{liveMetrics.total_requests_today}</p>
+            </div>
+            <div className="p-3 text-center">
+              <p className="text-[10px] text-muted-foreground font-medium">Valor Hoje</p>
+              <p className="text-lg font-bold text-foreground">{fmtBRL(liveMetrics.total_value_today)}</p>
+            </div>
+            <div className="p-3 text-center">
+              <p className="text-[10px] text-muted-foreground font-medium">Gargalos Ativos</p>
+              <p className={`text-lg font-bold ${liveMetrics.active_bottlenecks > 3 ? "text-red-500" : "text-foreground"}`}>{liveMetrics.active_bottlenecks}</p>
+            </div>
+            <div className="p-3 text-center">
+              <p className="text-[10px] text-muted-foreground font-medium">SLA Compliance</p>
+              <p className={`text-lg font-bold ${liveMetrics.sla_compliance_rate >= 85 ? "text-foreground" : "text-red-500"}`}>{liveMetrics.sla_compliance_rate}%</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Event Feed */}
+      <Card className="card-hover-yellow">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <Activity className="h-4 w-4 text-vp-yellow-dark" />
+            Feed de Eventos
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">Últimos eventos do sistema em tempo real</p>
+        </CardHeader>
+        <CardContent>
+          {liveEvents.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+              <Activity className="h-8 w-8 mb-2 animate-pulse" />
+              <p className="text-xs">{wsConnected ? "Aguardando eventos..." : "Conectando ao servidor..."}</p>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
+              {liveEvents.map((evt) => (
+                <div
+                  key={evt._id}
+                  className="flex items-start gap-3 rounded-lg border p-3 animate-in slide-in-from-top-2 duration-300"
+                >
+                  {evt.type === "requisition:created" && (
+                    <>
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-blue-100">
+                        <Package className="h-3.5 w-3.5 text-blue-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-mono font-bold text-foreground">{evt.ticket_id}</span>
+                          <Badge variant="outline" className="text-[9px] bg-blue-50 text-blue-600 border-blue-200">Nova Requisição</Badge>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          {evt.module} · {evt.department} · {fmtBRL(evt.value)}
+                        </p>
+                      </div>
+                    </>
+                  )}
+                  {evt.type === "sla:breach" && (
+                    <>
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-red-100">
+                        <AlertCircle className="h-3.5 w-3.5 text-red-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-mono font-bold text-foreground">{evt.ticket_id}</span>
+                          <Badge variant="outline" className="text-[9px] bg-red-50 text-red-600 border-red-200">SLA Excedido</Badge>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          {evt.stage.replace(/_/g, " ")} · {evt.actual_hours}h / {evt.target_hours}h meta · {evt.responsible}
+                        </p>
+                      </div>
+                    </>
+                  )}
+                  {evt.type === "purchase:completed" && (
+                    <>
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-emerald-100">
+                        <ShoppingCart className="h-3.5 w-3.5 text-emerald-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-mono font-bold text-foreground">{evt.ticket_id}</span>
+                          <Badge variant="outline" className="text-[9px] bg-emerald-50 text-emerald-600 border-emerald-200">Compra Concluída</Badge>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          {fmtBRL(evt.total_value)} · Economia {fmtBRL(evt.savings)} · {evt.cycle_time_days}d ciclo
+                        </p>
+                      </div>
+                    </>
+                  )}
+                  {evt.type === "metrics:update" && (
+                    <>
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-amber-100">
+                        <BarChart3 className="h-3.5 w-3.5 text-amber-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-[9px] bg-amber-50 text-amber-600 border-amber-200">Métricas Atualizadas</Badge>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          {evt.total_requests_today} req · {fmtBRL(evt.total_value_today)} · SLA {evt.sla_compliance_rate}% · {evt.active_bottlenecks} gargalos
+                        </p>
+                      </div>
+                    </>
+                  )}
+                  <span className="text-[9px] text-muted-foreground shrink-0 tabular-nums">
+                    agora
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
 
     {/* Export Dialog */}
