@@ -21,30 +21,15 @@ vi.mock("sonner", () => ({
   Toaster: () => null,
 }));
 
-// Dynamic import the page component after mocks are set up
-async function getProductsPage() {
-  const mod = await import("../../routes/products");
-  return mod;
-}
+// Import the route module to get the component
+import { Route as ProductsRoute } from "../../routes/products";
 
 function renderProductsPage() {
-  // We render the ProductsPage by extracting the component from the route
-  // Since the component is defined as a function inside the file, we'll
-  // create a minimal router that renders it
+  const PageComponent = (ProductsRoute as any).options?.component;
+  if (!PageComponent) throw new Error("Could not extract ProductsPage component");
+
   const rootRoute = createRootRoute({
-    component: () => {
-      // Dynamically render the products page
-      const [ProductsPage, setProductsPage] = React.useState<React.FC | null>(null);
-      React.useEffect(() => {
-        getProductsPage().then((mod) => {
-          // Route.options.component is the page component
-          const comp = (mod.Route as any).options?.component;
-          if (comp) setProductsPage(() => comp);
-        });
-      }, []);
-      if (!ProductsPage) return <div>Loading...</div>;
-      return <ProductsPage />;
-    },
+    component: () => <PageComponent />,
   });
 
   const router = createRouter({
