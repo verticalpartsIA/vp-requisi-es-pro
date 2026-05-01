@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { OctagonAlert, Bell, Lightbulb } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +30,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 
 export const Route = createFileRoute("/logs")({
   head: () => ({
@@ -73,9 +80,161 @@ interface AuditLogEntry {
 
 type SlaStatus = "ok" | "warning" | "breach";
 
+/* ── Ticket Detail types (API response schema) ── */
+
+interface StageSummary {
+  stage: string;
+  status: "COMPLETED" | "IN_PROGRESS" | "PENDING";
+  started_at: string;
+  completed_at?: string;
+  duration_hours: number;
+  actor: string;
+  actor_role: string;
+}
+
+interface TicketDetailResponse {
+  ticket_id: string;
+  module: string;
+  status: string;
+  lifecycle: {
+    created_at: string;
+    completed_at?: string;
+    total_duration_hours: number;
+    sla_target_hours: number;
+    sla_formatted: string;
+    is_within_sla: boolean;
+    sla_percentage_used: number;
+  };
+  current_stage: string;
+  stages_summary: StageSummary[];
+  logs: AuditLogEntry[];
+  bottleneck_analysis: BottleneckAnalysis | null;
+}
+
 /* ────────────────────────────────────────────────
  *  Mock data — NO financial data (§2.3)
  * ──────────────────────────────────────────────── */
+
+const ticketDetails: Record<string, TicketDetailResponse> = {
+  "M1-000065": {
+    ticket_id: "M1-000065",
+    module: "M1",
+    status: "EM_APROVAÇÃO",
+    lifecycle: {
+      created_at: "28/04/2026 09:15",
+      total_duration_hours: 22.75,
+      sla_target_hours: 720,
+      sla_formatted: "22h",
+      is_within_sla: true,
+      sla_percentage_used: 3.2,
+    },
+    current_stage: "V3_APROVACAO",
+    stages_summary: [
+      { stage: "V1_REQUISICAO", status: "COMPLETED", started_at: "28/04 09:15", completed_at: "28/04 09:15", duration_hours: 0, actor: "Carlos Silva", actor_role: "Requisitante" },
+      { stage: "V2_COTACAO", status: "COMPLETED", started_at: "28/04 09:15", completed_at: "28/04 11:30", duration_hours: 2.25, actor: "Ana Oliveira", actor_role: "Cotador" },
+      { stage: "V3_APROVACAO", status: "IN_PROGRESS", started_at: "29/04 08:00", duration_hours: 42, actor: "Diretor Marcos", actor_role: "Aprovador" },
+      { stage: "V4_COMPRA", status: "PENDING", started_at: "", duration_hours: 0, actor: "—", actor_role: "Comprador" },
+    ],
+    logs: [],
+    bottleneck_analysis: null,
+  },
+  "M4-000031": {
+    ticket_id: "M4-000031",
+    module: "M4",
+    status: "EM_COTAÇÃO",
+    lifecycle: {
+      created_at: "25/04/2026 14:22",
+      total_duration_hours: 68,
+      sla_target_hours: 336,
+      sla_formatted: "2 dias 20h",
+      is_within_sla: false,
+      sla_percentage_used: 20.2,
+    },
+    current_stage: "V2_COTACAO",
+    stages_summary: [
+      { stage: "V1_REQUISICAO", status: "COMPLETED", started_at: "25/04 14:22", completed_at: "25/04 14:22", duration_hours: 0, actor: "Roberto Mendes", actor_role: "Requisitante" },
+      { stage: "V2_COTACAO", status: "IN_PROGRESS", started_at: "27/04 10:00", duration_hours: 68, actor: "Ana Oliveira", actor_role: "Cotador" },
+      { stage: "V3_APROVACAO", status: "PENDING", started_at: "", duration_hours: 0, actor: "—", actor_role: "Aprovador" },
+      { stage: "V4_COMPRA", status: "PENDING", started_at: "", duration_hours: 0, actor: "—", actor_role: "Comprador" },
+    ],
+    logs: [],
+    bottleneck_analysis: {
+      ticket_id: "M4-000031",
+      current_stage: "V2",
+      stuck_since: "27/04/2026 10:00",
+      hours_in_current_stage: 68,
+      target_hours_for_stage: 24,
+      is_bottleneck: true,
+      responsible_user: "Ana Oliveira",
+      responsible_role: "Cotador",
+      blocking_reason: "Aguardando diagnóstico técnico",
+      recommendation: "Solicitar laudo técnico urgente ao requisitante",
+      escalation_required: true,
+    },
+  },
+  "M2-000042": {
+    ticket_id: "M2-000042",
+    module: "M2",
+    status: "APROVADO",
+    lifecycle: {
+      created_at: "27/04/2026 07:45",
+      total_duration_hours: 8.75,
+      sla_target_hours: 336,
+      sla_formatted: "8h",
+      is_within_sla: true,
+      sla_percentage_used: 2.6,
+    },
+    current_stage: "V3_APROVACAO",
+    stages_summary: [
+      { stage: "V1_REQUISICAO", status: "COMPLETED", started_at: "27/04 07:45", completed_at: "27/04 07:45", duration_hours: 0, actor: "Fernanda Costa", actor_role: "Requisitante" },
+      { stage: "V3_APROVACAO", status: "COMPLETED", started_at: "27/04 07:45", completed_at: "27/04 16:30", duration_hours: 8.75, actor: "Diretor Marcos", actor_role: "Aprovador" },
+    ],
+    logs: [],
+    bottleneck_analysis: null,
+  },
+  "M5-000028": {
+    ticket_id: "M5-000028",
+    module: "M5",
+    status: "FINALIZADO",
+    lifecycle: {
+      created_at: "24/04/2026 11:15",
+      completed_at: "30/04/2026 09:00",
+      total_duration_hours: 178,
+      sla_target_hours: 720,
+      sla_formatted: "7 dias 10h",
+      is_within_sla: true,
+      sla_percentage_used: 24.7,
+    },
+    current_stage: "V5_RECEBIMENTO",
+    stages_summary: [
+      { stage: "V1_REQUISICAO", status: "COMPLETED", started_at: "24/04 11:15", completed_at: "24/04 11:15", duration_hours: 0, actor: "Paulo Ferreira", actor_role: "Comprador" },
+      { stage: "V4_COMPRA", status: "COMPLETED", started_at: "24/04 11:15", completed_at: "24/04 11:15", duration_hours: 36, actor: "Paulo Ferreira", actor_role: "Comprador" },
+      { stage: "V5_RECEBIMENTO", status: "COMPLETED", started_at: "30/04 09:00", completed_at: "30/04 09:00", duration_hours: 142, actor: "José Santos", actor_role: "Almoxarife" },
+    ],
+    logs: [],
+    bottleneck_analysis: null,
+  },
+  "M3-000018": {
+    ticket_id: "M3-000018",
+    module: "M3",
+    status: "EM_COTAÇÃO",
+    lifecycle: {
+      created_at: "28/04/2026 10:00",
+      total_duration_hours: 30,
+      sla_target_hours: 720,
+      sla_formatted: "1 dia 6h",
+      is_within_sla: true,
+      sla_percentage_used: 4.2,
+    },
+    current_stage: "V2_COTACAO",
+    stages_summary: [
+      { stage: "V1_REQUISICAO", status: "COMPLETED", started_at: "28/04 10:00", completed_at: "28/04 10:00", duration_hours: 0, actor: "Ana Oliveira", actor_role: "Cotador" },
+      { stage: "V2_COTACAO", status: "IN_PROGRESS", started_at: "28/04 17:00", duration_hours: 30, actor: "Ana Oliveira", actor_role: "Cotador" },
+    ],
+    logs: [],
+    bottleneck_analysis: null,
+  },
+};
 
 interface BottleneckAnalysis {
   ticket_id: string;
