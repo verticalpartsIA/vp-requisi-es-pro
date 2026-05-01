@@ -1,8 +1,18 @@
-function getEnvValue(name: string) {
-  return process.env[name];
+function getEnvValue(name: string): string | undefined {
+  // Browser (Vite client bundle): usa import.meta.env
+  if (typeof import.meta !== "undefined" && import.meta.env) {
+    const val = (import.meta.env as Record<string, string | undefined>)[name];
+    if (val) return val;
+  }
+  // Server-side (Node.js SSR): usa process.env
+  if (typeof process !== "undefined" && process.env) {
+    const val = process.env[name];
+    if (val) return val;
+  }
+  return undefined;
 }
 
-function requireEnv(name: string) {
+function requireEnv(name: string): string {
   const value = getEnvValue(name);
 
   if (!value) {
