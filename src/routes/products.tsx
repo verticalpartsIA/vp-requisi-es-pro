@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "@tanstack/react-router";
 import {
   Package, Plus, ChevronRight, ChevronLeft, FileText, Truck,
   Link2, X, CalendarIcon,
@@ -15,16 +16,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
-import { TicketsTable, type TicketRow } from "@/components/tickets-table";
+import { TicketsTable } from "@/components/tickets-table";
 import { toast } from "sonner";
-
-const sampleTickets: TicketRow[] = [
-  { id: "M1-000065", title: "Parafusos Inox 304 M10x50mm", requester: "Carlos Silva", urgency: "HIGH", status: "COTAÇÃO", date: "28/04" },
-  { id: "M1-000064", title: "Luvas Nitrílicas Caixa c/100", requester: "Ana Souza", urgency: "MEDIUM", status: "APROVAÇÃO", date: "27/04" },
-  { id: "M1-000063", title: "Óleo Hidráulico ISO 68 20L", requester: "João Lima", urgency: "URGENT", status: "ABERTO", date: "26/04" },
-  { id: "M1-000062", title: "Disco de Corte 7\" Inox", requester: "Maria Costa", urgency: "LOW", status: "CONCLUÍDO", date: "24/04" },
-  { id: "M1-000061", title: "Rolamento 6205 ZZ", requester: "Pedro Santos", urgency: "MEDIUM", status: "COMPRA", date: "22/04" },
-];
+import { createProductRequisitionClient, listProductRequisitionsClient } from "@/features/requisitions/client";
+import { useAuth } from "@/features/auth/auth-context";
+import type { TicketRow } from "@/components/tickets-table";
 
 const URGENCY = [
   { value: "LOW", label: "Baixa" },
@@ -50,8 +46,12 @@ export const Route = createFileRoute("/products")({
 });
 
 function ProductsPage() {
+  const router = useRouter();
+  const { session, profile, user } = useAuth();
+  const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [step, setStep] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Step 1 — Product
   const [productName, setProductName] = useState("");
@@ -70,6 +70,11 @@ function ProductsPage() {
   const [deliveryLocation, setDeliveryLocation] = useState("");
   const [urgencyLevel, setUrgencyLevel] = useState("");
   const [justification, setJustification] = useState("");
+
+  useEffect(() => {
+    if (!session) return;
+    void listProductRequisitionsClient().then(setTickets);
+  }, [session]);
 
   const resetForm = () => {
     setStep(0);
@@ -100,12 +105,65 @@ function ProductsPage() {
     setStep((s) => Math.min(s + 1, STEPS.length - 1));
   };
 
-  const handleSubmit = () => {
-    toast.success("Requisição criada com sucesso!", {
-      description: `${productName} — ${parseFloat(quantity)} un`,
+  const handleSubmit = async () => {
+    if (!validateStep() || !deliveryDeadline) return;
+
+    const cleanedReferenceLinks = referenceLinks
+      .map((link) => link.trim())
+      .filter(Boolean);
+
+    const hasInvalidLink = cleanedReferenceLinks.some((link) => {
+      try {
+        new URL(link);
+        return false;
+      } catch {
+        return true;
+      }
     });
-    setDialogOpen(false);
-    resetForm();
+
+    if (hasInvalidLink) {
+      toast.error("Todos os links de referência devem ser URLs válidas.");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const result = await createProductRequisitionClient({
+        productName,
+        description,
+        quantity: parseFloat(quantity),
+        technicalSpecs,
+        brandPreference,
+        modelReference,
+        referenceLinks: cleanedReferenceLinks,
+        onlinePurchaseSuggestion,
+        deliveryDeadline: deliveryDeadline.toISOString(),
+        deliveryLocation,
+        urgencyLevel: urgencyLevel as "LOW" | "MEDIUM" | "HIGH" | "URGENT",
+        justification,
+        requesterName: profile?.full_name || user?.email || "Usuário VerticalParts",
+        requesterEmail: profile?.email || user?.email || "",
+        requesterDepartment: profile?.department || "Não informado",
+        requesterProfileId: user?.id,
+      });
+
+      toast.success("Requisição criada com sucesso!", {
+        description: `${result.ticketNumber} — ${productName}`,
+      });
+      setDialogOpen(false);
+      resetForm();
+      setTickets(await listProductRequisitionsClient());
+      await router.invalidate();
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível criar a requisição agora.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const addReferenceLink = () => {
@@ -143,7 +201,7 @@ function ProductsPage() {
       </div>
 
       <TicketsTable
-        tickets={sampleTickets}
+        tickets={tickets}
         emptyIcon={<Package className="h-12 w-12 mx-auto text-muted-foreground/40 mb-4" />}
         emptyMessage="Nenhuma requisição de produto ainda."
       />
@@ -321,7 +379,7 @@ function ProductsPage() {
                 Próximo <ChevronRight className="h-4 w-4 ml-1" />
               </Button>
             ) : (
-              <Button variant="vp" onClick={handleSubmit}>
+              <Button variant="vp" onClick={handleSubmit} disabled={isSubmitting}>
                 <Package className="h-4 w-4 mr-1" /> Enviar Requisição
               </Button>
             )}

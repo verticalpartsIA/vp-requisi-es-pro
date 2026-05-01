@@ -1,6 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { FileSearch, Plus, Trash2, Trophy, DollarSign, Clock, Scale, CheckCircle2, ArrowRight } from "lucide-react";
 import { useState } from "react";
+import { useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,40 +16,30 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  finalizeQuotation,
+  saveQuotationProposals,
+  saveQuotationSuppliers,
+  type QuotationQueueItem,
+  type SupplierEntry,
+} from "@/features/quotations/api";
+import { toast } from "sonner";
+import { AccessGuard } from "@/components/access-guard";
+import {
+  finalizeQuotationClient,
+  listQuotationQueueClient,
+  saveQuotationProposalsClient,
+  saveQuotationSuppliersClient,
+} from "@/features/quotations/client";
+import { useAuth } from "@/features/auth/auth-context";
+
+type QuotationStatus = "pending" | "quoting" | "awaiting_proposals" | "selecting_winner" | "completed";
+type WinCriteria = "price" | "deadline" | "price_deadline";
+type Phase = "suppliers" | "proposals" | "winner";
 
 export const Route = createFileRoute("/quoting")({
   component: QuotingPage,
 });
-
-/* ── Types ── */
-
-type QuotationStatus = "pending" | "quoting" | "awaiting_proposals" | "selecting_winner" | "completed";
-type WinCriteria = "price" | "deadline" | "price_deadline";
-
-interface QueueItem {
-  id: string;
-  title: string;
-  urgency: string;
-  module: string;
-  requesterNotes: string;
-  status: QuotationStatus;
-}
-
-interface SupplierEntry {
-  name: string;
-  price: string;
-  deadline: string;
-  notes: string;
-  proposalReceived: boolean;
-}
-
-/* ── Mock data (no monetary values on listing) ── */
-
-const initialQueue: QueueItem[] = [
-  { id: "M1-000065", title: "Parafusos Inox 304", urgency: "HIGH", module: "M1", requesterNotes: "Urgente para linha de produção. Aceitar somente grau A2-70.", status: "pending" },
-  { id: "M2-000042", title: "Viagem SP - Cliente ABC", urgency: "MEDIUM", module: "M2", requesterNotes: "Preferência por voo direto. Hotel próximo ao cliente.", status: "pending" },
-  { id: "M3-000018", title: "Consultoria ERP Financeiro", urgency: "LOW", module: "M3", requesterNotes: "Escopo: módulos fiscal e contábil. Mínimo 2 anos de experiência.", status: "pending" },
-];
 
 const urgLabel: Record<string, string> = {
   HIGH: "Alta",
@@ -66,6 +57,7 @@ const statusLabel: Record<QuotationStatus, string> = {
 };
 
 function urgBadge(u: string) {
+  if (u === "URGENT") return "bg-red-100 text-red-700 border-red-200";
   if (u === "HIGH") return "bg-orange-100 text-orange-700 border-orange-200";
   if (u === "MEDIUM") return "bg-yellow-100 text-yellow-700 border-yellow-200";
   return "bg-green-100 text-green-700 border-green-200";
@@ -84,30 +76,45 @@ const criteriaLabels: Record<WinCriteria, { label: string; icon: React.ReactNode
   price_deadline: { label: "Preço + Prazo", icon: <Scale className="h-4 w-4" /> },
 };
 
-/* ── Component ── */
+function getInitialPhase(item: QuotationQueueItem): Phase {
+  if (item.status === "selecting_winner") return "winner";
+  if (item.status === "awaiting_proposals" || item.status === "quoting") return "proposals";
+  return "suppliers";
+}
+
+function createEmptySupplier(): SupplierEntry {
+  return { name: "", price: "", deadline: "", notes: "", proposalReceived: false };
+}
 
 function QuotingPage() {
-  const [queue, setQueue] = useState<QueueItem[]>(initialQueue);
-  const [selectedItem, setSelectedItem] = useState<QueueItem | null>(null);
+  const { session } = useAuth();
+  const router = useRouter();
+  const [queue, setQueue] = useState<QuotationQueueItem[]>([]);
+  const [selectedItem, setSelectedItem] = useState<QuotationQueueItem | null>(null);
   const [suppliers, setSuppliers] = useState<SupplierEntry[]>([]);
-  const [phase, setPhase] = useState<"suppliers" | "proposals" | "winner">("suppliers");
+  const [phase, setPhase] = useState<Phase>("suppliers");
   const [winnerIndex, setWinnerIndex] = useState<number | null>(null);
   const [winCriteria, setWinCriteria] = useState<WinCriteria>("price");
   const [confirmDialog, setConfirmDialog] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-  /* ── Handlers ── */
+  useEffect(() => {
+    if (!session) return;
+    void listQuotationQueueClient().then(setQueue);
+  }, [session]);
 
-  const openQuotation = (item: QueueItem) => {
+  const openQuotation = (item: QuotationQueueItem) => {
     setSelectedItem(item);
-    setSuppliers([{ name: "", price: "", deadline: "", notes: "", proposalReceived: false }]);
-    setPhase("suppliers");
-    setWinnerIndex(null);
-    setWinCriteria("price");
+    setSuppliers(item.suppliers.length > 0 ? item.suppliers : [createEmptySupplier()]);
+    setPhase(getInitialPhase(item));
+    const selectedWinnerIndex = item.suppliers.findIndex((supplier) => supplier.isWinner);
+    setWinnerIndex(selectedWinnerIndex >= 0 ? selectedWinnerIndex : null);
+    setWinCriteria(item.winCriteria);
   };
 
   const addSupplier = () => {
     if (suppliers.length >= 3) return;
-    setSuppliers((prev) => [...prev, { name: "", price: "", deadline: "", notes: "", proposalReceived: false }]);
+    setSuppliers((prev) => [...prev, createEmptySupplier()]);
   };
 
   const removeSupplier = (index: number) => {
@@ -117,46 +124,121 @@ function QuotingPage() {
   };
 
   const updateSupplier = (index: number, field: keyof SupplierEntry, value: string | boolean) => {
-    setSuppliers((prev) =>
-      prev.map((s, i) => (i === index ? { ...s, [field]: value } : s))
-    );
+    setSuppliers((prev) => prev.map((supplier, i) => (i === index ? { ...supplier, [field]: value } : supplier)));
   };
 
-  const canAdvanceToProposals = suppliers.length > 0 && suppliers.every((s) => s.name.trim() !== "");
-
-  const advanceToProposals = () => {
-    setPhase("proposals");
-    setQueue((prev) =>
-      prev.map((q) => (q.id === selectedItem?.id ? { ...q, status: "awaiting_proposals" as QuotationStatus } : q))
-    );
-  };
-
-  const allProposalsReceived = suppliers.every((s) => s.proposalReceived && s.price.trim() !== "");
-
-  const advanceToWinner = () => {
-    setPhase("winner");
-    setQueue((prev) =>
-      prev.map((q) => (q.id === selectedItem?.id ? { ...q, status: "selecting_winner" as QuotationStatus } : q))
-    );
-  };
-
-  const finalizeQuotation = () => {
-    if (winnerIndex === null) return;
-    // Mark as completed
-    setQueue((prev) =>
-      prev.map((q) => (q.id === selectedItem?.id ? { ...q, status: "completed" as QuotationStatus } : q))
-    );
-    setConfirmDialog(false);
-    setSelectedItem(null);
-  };
+  const canAdvanceToProposals = suppliers.length > 0 && suppliers.every((supplier) => supplier.name.trim() !== "");
+  const allProposalsReceived = suppliers.every((supplier) => supplier.proposalReceived && supplier.price.trim() !== "");
 
   const closeDialog = () => {
     setSelectedItem(null);
+    setConfirmDialog(false);
+    setSuppliers([]);
+    setWinnerIndex(null);
+    setPhase("suppliers");
+    setWinCriteria("price");
   };
 
+  const advanceToProposals = async () => {
+    if (!selectedItem || !canAdvanceToProposals) return;
+
+    setIsSaving(true);
+
+    try {
+      const result = await saveQuotationSuppliersClient(selectedItem.requisitionId, suppliers);
+
+      setSuppliers(result.suppliers);
+      setSelectedItem((current) => (
+        current
+          ? {
+              ...current,
+              quotationId: result.quotationId,
+              status: result.status,
+              suppliers: result.suppliers,
+            }
+          : current
+      ));
+      setPhase("proposals");
+      setQueue(await listQuotationQueueClient());
+      await router.invalidate();
+      toast.success("Fornecedores salvos com sucesso.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível salvar os fornecedores.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const advanceToWinner = async () => {
+    if (!selectedItem?.quotationId) {
+      toast.error("A cotação ainda não foi inicializada corretamente.");
+      return;
+    }
+
+    if (!allProposalsReceived) return;
+
+    setIsSaving(true);
+
+    try {
+      const result = await saveQuotationProposalsClient(selectedItem.quotationId, suppliers);
+
+      setSuppliers(result.suppliers);
+      setSelectedItem((current) => (
+        current
+          ? {
+              ...current,
+              status: result.status,
+              suppliers: result.suppliers,
+            }
+          : current
+      ));
+      setPhase("winner");
+      setQueue(await listQuotationQueueClient());
+      await router.invalidate();
+      toast.success("Propostas registradas com sucesso.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível salvar as propostas.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleConfirmWinner = async () => {
+    if (!selectedItem?.quotationId || winnerIndex === null) return;
+
+    const winner = suppliers[winnerIndex];
+
+    if (!winner?.id) {
+      toast.error("Selecione um fornecedor já salvo para finalizar a cotação.");
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      await finalizeQuotationClient(
+        selectedItem.requisitionId,
+        selectedItem.quotationId,
+        winner.id,
+        winCriteria,
+      );
+
+      toast.success("Cotação finalizada e enviada para aprovação.");
+      closeDialog();
+      setQueue(await listQuotationQueueClient());
+      await router.invalidate();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível finalizar a cotação.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const summaryStatuses: QuotationStatus[] = ["pending", "awaiting_proposals", "selecting_winner", "completed"];
+
   return (
+    <AccessGuard roles={["admin", "comprador"]}>
     <div className="max-w-5xl mx-auto space-y-6">
-      {/* Header */}
       <div className="flex items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent">
           <FileSearch className="h-5 w-5 text-vp-yellow-dark" />
@@ -167,74 +249,70 @@ function QuotingPage() {
         </div>
       </div>
 
-      {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {(["pending", "awaiting_proposals", "selecting_winner", "completed"] as QuotationStatus[]).map((s) => (
-          <Card key={s} className="card-hover-yellow">
+        {summaryStatuses.map((status) => (
+          <Card key={status} className="card-hover-yellow">
             <CardContent className="p-4 text-center">
-              <p className="text-2xl font-bold text-foreground">{queue.filter((q) => q.status === s).length}</p>
-              <p className="text-xs text-muted-foreground">{statusLabel[s]}</p>
+              <p className="text-2xl font-bold text-foreground">{queue.filter((item) => item.status === status).length}</p>
+              <p className="text-xs text-muted-foreground">{statusLabel[status]}</p>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      {/* Queue — NO monetary values */}
       <div className="space-y-3">
-        {queue.map((t) => (
-          <Card key={t.id} className="card-hover-yellow">
+        {queue.map((item) => (
+          <Card key={item.requisitionId} className="card-hover-yellow">
             <CardContent className="p-4 flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <Badge variant="outline" className="font-mono text-xs">{t.id}</Badge>
+                <Badge variant="outline" className="font-mono text-xs">{item.ticketNumber}</Badge>
                 <div>
-                  <p className="font-semibold text-foreground text-sm">{t.title}</p>
-                  <p className="text-xs text-muted-foreground">Módulo: {t.module}</p>
+                  <p className="font-semibold text-foreground text-sm">{item.title}</p>
+                  <p className="text-xs text-muted-foreground">Módulo: {item.module}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${statusBadge(t.status)}`}>
-                  {statusLabel[t.status]}
+                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${statusBadge(item.status)}`}>
+                  {statusLabel[item.status]}
                 </span>
-                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${urgBadge(t.urgency)}`}>
-                  {urgLabel[t.urgency] || t.urgency}
+                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${urgBadge(item.urgency)}`}>
+                  {urgLabel[item.urgency] || item.urgency}
                 </span>
-                {t.status !== "completed" && (
-                  <Button variant="vp" size="sm" onClick={() => openQuotation(t)}>
-                    {t.status === "pending" ? "Cotar" : "Continuar"}
-                  </Button>
-                )}
-                {t.status === "completed" && (
-                  <Badge className="bg-green-100 text-green-700 border-green-200">
-                    <CheckCircle2 className="h-3 w-3 mr-1" /> Concluída
-                  </Badge>
-                )}
+                <Button variant="vp" size="sm" onClick={() => openQuotation(item)}>
+                  {item.status === "pending" ? "Cotar" : "Continuar"}
+                </Button>
               </div>
             </CardContent>
           </Card>
         ))}
+
+        {queue.length === 0 && (
+          <Card className="card-hover-yellow">
+            <CardContent className="p-8 text-center text-sm text-muted-foreground">
+              Nenhuma requisição aguardando cotação neste momento.
+            </CardContent>
+          </Card>
+        )}
       </div>
 
-      {/* ── Main Quotation Dialog ── */}
       <Dialog open={!!selectedItem && !confirmDialog} onOpenChange={(open) => !open && closeDialog()}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-lg">
-              Cotação — {selectedItem?.id}
+              Cotação — {selectedItem?.ticketNumber}
             </DialogTitle>
             <DialogDescription>
               {selectedItem?.title}
             </DialogDescription>
           </DialogHeader>
 
-          {/* Requester notes */}
           {selectedItem?.requesterNotes && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-              <p className="text-xs font-semibold text-amber-800 mb-1">📋 Observações do Requisitante</p>
+              <p className="text-xs font-semibold text-amber-800 mb-1">Observações do Requisitante</p>
               <p className="text-sm text-amber-900">{selectedItem.requesterNotes}</p>
             </div>
           )}
 
-          {/* Phase indicator */}
           <div className="flex items-center gap-2 text-xs">
             <span className={`rounded-full px-3 py-1 font-medium ${phase === "suppliers" ? "bg-vp-yellow text-vp-dark" : "bg-muted text-muted-foreground"}`}>1. Fornecedores</span>
             <ArrowRight className="h-3 w-3 text-muted-foreground" />
@@ -243,24 +321,23 @@ function QuotingPage() {
             <span className={`rounded-full px-3 py-1 font-medium ${phase === "winner" ? "bg-vp-yellow text-vp-dark" : "bg-muted text-muted-foreground"}`}>3. Vencedor</span>
           </div>
 
-          {/* ── Phase 1: Select Suppliers ── */}
           {phase === "suppliers" && (
             <div className="space-y-4 mt-2">
               <p className="text-sm text-muted-foreground">Selecione até <strong>3 fornecedores</strong> para esta cotação.</p>
-              {suppliers.map((sup, i) => (
-                <Card key={i} className="border border-border">
+              {suppliers.map((supplier, index) => (
+                <Card key={supplier.id || index} className="border border-border">
                   <CardContent className="p-4 space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-semibold text-foreground">Fornecedor {i + 1}</span>
+                      <span className="text-sm font-semibold text-foreground">Fornecedor {index + 1}</span>
                       {suppliers.length > 1 && (
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive" onClick={() => removeSupplier(i)}>
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive" onClick={() => removeSupplier(index)}>
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       )}
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs">Nome do Fornecedor</Label>
-                      <Input placeholder="Ex: ABC Ltda" value={sup.name} onChange={(e) => updateSupplier(i, "name", e.target.value)} />
+                      <Input placeholder="Ex: ABC Ltda" value={supplier.name} onChange={(e) => updateSupplier(index, "name", e.target.value)} />
                     </div>
                   </CardContent>
                 </Card>
@@ -272,45 +349,44 @@ function QuotingPage() {
               )}
               <DialogFooter>
                 <Button variant="ghost" onClick={closeDialog}>Cancelar</Button>
-                <Button variant="vp" disabled={!canAdvanceToProposals} onClick={advanceToProposals}>
+                <Button variant="vp" disabled={!canAdvanceToProposals || isSaving} onClick={advanceToProposals}>
                   Enviar para Cotação <ArrowRight className="h-4 w-4 ml-1" />
                 </Button>
               </DialogFooter>
             </div>
           )}
 
-          {/* ── Phase 2: Receive Proposals ── */}
           {phase === "proposals" && (
             <div className="space-y-4 mt-2">
               <p className="text-sm text-muted-foreground">Registre as propostas recebidas de cada fornecedor.</p>
-              {suppliers.map((sup, i) => (
-                <Card key={i} className={`border ${sup.proposalReceived ? "border-green-300 bg-green-50/30" : "border-border"}`}>
+              {suppliers.map((supplier, index) => (
+                <Card key={supplier.id || index} className={`border ${supplier.proposalReceived ? "border-green-300 bg-green-50/30" : "border-border"}`}>
                   <CardContent className="p-4 space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-semibold text-foreground">{sup.name}</span>
+                      <span className="text-sm font-semibold text-foreground">{supplier.name}</span>
                       <label className="flex items-center gap-2 text-xs cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={sup.proposalReceived}
-                          onChange={(e) => updateSupplier(i, "proposalReceived", e.target.checked)}
+                          checked={supplier.proposalReceived}
+                          onChange={(e) => updateSupplier(index, "proposalReceived", e.target.checked)}
                           className="rounded border-border"
                         />
                         Proposta recebida
                       </label>
                     </div>
-                    {sup.proposalReceived && (
+                    {supplier.proposalReceived && (
                       <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-1">
                           <Label className="text-xs">Preço (R$)</Label>
-                          <Input placeholder="0,00" value={sup.price} onChange={(e) => updateSupplier(i, "price", e.target.value)} />
+                          <Input placeholder="0,00" value={supplier.price} onChange={(e) => updateSupplier(index, "price", e.target.value)} />
                         </div>
                         <div className="space-y-1">
                           <Label className="text-xs">Prazo de Entrega</Label>
-                          <Input type="date" value={sup.deadline} onChange={(e) => updateSupplier(i, "deadline", e.target.value)} />
+                          <Input type="date" value={supplier.deadline} onChange={(e) => updateSupplier(index, "deadline", e.target.value)} />
                         </div>
                         <div className="col-span-2 space-y-1">
                           <Label className="text-xs">Observações</Label>
-                          <Textarea placeholder="Condições, frete, garantia..." value={sup.notes} onChange={(e) => updateSupplier(i, "notes", e.target.value)} className="min-h-[60px]" />
+                          <Textarea placeholder="Condições, frete, garantia..." value={supplier.notes} onChange={(e) => updateSupplier(index, "notes", e.target.value)} className="min-h-[60px]" />
                         </div>
                       </div>
                     )}
@@ -319,59 +395,55 @@ function QuotingPage() {
               ))}
               <DialogFooter>
                 <Button variant="ghost" onClick={() => setPhase("suppliers")}>Voltar</Button>
-                <Button variant="vp" disabled={!allProposalsReceived} onClick={advanceToWinner}>
+                <Button variant="vp" disabled={!allProposalsReceived || isSaving} onClick={advanceToWinner}>
                   Selecionar Vencedor <ArrowRight className="h-4 w-4 ml-1" />
                 </Button>
               </DialogFooter>
             </div>
           )}
 
-          {/* ── Phase 3: Select Winner ── */}
           {phase === "winner" && (
             <div className="space-y-4 mt-2">
               <p className="text-sm text-muted-foreground">Compare as propostas e selecione o fornecedor vencedor.</p>
-
-              {/* Criteria selector */}
               <div className="space-y-2">
                 <Label className="text-xs font-semibold">Critério de Vitória</Label>
                 <div className="flex gap-2">
-                  {(Object.keys(criteriaLabels) as WinCriteria[]).map((c) => (
+                  {(Object.keys(criteriaLabels) as WinCriteria[]).map((criteria) => (
                     <Button
-                      key={c}
-                      variant={winCriteria === c ? "vp" : "outline"}
+                      key={criteria}
+                      variant={winCriteria === criteria ? "vp" : "outline"}
                       size="sm"
-                      onClick={() => setWinCriteria(c)}
+                      onClick={() => setWinCriteria(criteria)}
                       className="text-xs"
                     >
-                      {criteriaLabels[c].icon}
-                      <span className="ml-1">{criteriaLabels[c].label}</span>
+                      {criteriaLabels[criteria].icon}
+                      <span className="ml-1">{criteriaLabels[criteria].label}</span>
                     </Button>
                   ))}
                 </div>
               </div>
 
-              {/* Supplier comparison */}
               <div className="space-y-3">
-                {suppliers.map((sup, i) => (
+                {suppliers.map((supplier, index) => (
                   <Card
-                    key={i}
-                    className={`border-2 cursor-pointer transition-all ${winnerIndex === i ? "border-vp-yellow bg-amber-50/50 shadow-md" : "border-border hover:border-vp-yellow/50"}`}
-                    onClick={() => setWinnerIndex(i)}
+                    key={supplier.id || index}
+                    className={`border-2 cursor-pointer transition-all ${winnerIndex === index ? "border-vp-yellow bg-amber-50/50 shadow-md" : "border-border hover:border-vp-yellow/50"}`}
+                    onClick={() => setWinnerIndex(index)}
                   >
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          {winnerIndex === i && <Trophy className="h-5 w-5 text-vp-yellow-dark" />}
+                          {winnerIndex === index && <Trophy className="h-5 w-5 text-vp-yellow-dark" />}
                           <div>
-                            <p className="font-semibold text-sm text-foreground">{sup.name}</p>
+                            <p className="font-semibold text-sm text-foreground">{supplier.name}</p>
                             <div className="flex gap-4 mt-1 text-xs text-muted-foreground">
-                              <span className="flex items-center gap-1"><DollarSign className="h-3 w-3" /> R$ {sup.price}</span>
-                              <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {sup.deadline}</span>
+                              <span className="flex items-center gap-1"><DollarSign className="h-3 w-3" /> R$ {supplier.price || "0,00"}</span>
+                              <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {supplier.deadline || "—"}</span>
                             </div>
-                            {sup.notes && <p className="text-xs text-muted-foreground mt-1">{sup.notes}</p>}
+                            {supplier.notes && <p className="text-xs text-muted-foreground mt-1">{supplier.notes}</p>}
                           </div>
                         </div>
-                        {winnerIndex === i && (
+                        {winnerIndex === index && (
                           <Badge className="bg-vp-yellow text-vp-dark border-vp-yellow-dark">Vencedor</Badge>
                         )}
                       </div>
@@ -382,11 +454,7 @@ function QuotingPage() {
 
               <DialogFooter>
                 <Button variant="ghost" onClick={() => setPhase("proposals")}>Voltar</Button>
-                <Button
-                  variant="vp"
-                  disabled={winnerIndex === null}
-                  onClick={() => setConfirmDialog(true)}
-                >
+                <Button variant="vp" disabled={winnerIndex === null || isSaving} onClick={() => setConfirmDialog(true)}>
                   <CheckCircle2 className="h-4 w-4 mr-1" /> Finalizar Cotação
                 </Button>
               </DialogFooter>
@@ -395,7 +463,6 @@ function QuotingPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Confirm dialog ── */}
       <Dialog open={confirmDialog} onOpenChange={setConfirmDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -412,19 +479,20 @@ function QuotingPage() {
               </div>
               <div className="text-sm text-muted-foreground space-y-1">
                 <p>Valor: <strong className="text-foreground">R$ {suppliers[winnerIndex].price}</strong></p>
-                <p>Prazo: <strong className="text-foreground">{suppliers[winnerIndex].deadline}</strong></p>
+                <p>Prazo: <strong className="text-foreground">{suppliers[winnerIndex].deadline || "—"}</strong></p>
                 <p>Critério: <strong className="text-foreground">{criteriaLabels[winCriteria].label}</strong></p>
               </div>
             </div>
           )}
           <DialogFooter>
             <Button variant="ghost" onClick={() => setConfirmDialog(false)}>Cancelar</Button>
-            <Button variant="vp" onClick={finalizeQuotation}>
+            <Button variant="vp" onClick={handleConfirmWinner} disabled={isSaving}>
               Confirmar e Enviar ao V3
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
+    </AccessGuard>
   );
 }

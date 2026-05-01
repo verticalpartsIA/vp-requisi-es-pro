@@ -1,5 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import {
   ShoppingCart,
   Trophy,
@@ -29,34 +29,16 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { type PurchaseItem } from "@/features/purchases/api";
+import { toast } from "sonner";
+import { AccessGuard } from "@/components/access-guard";
+import { confirmPurchaseClient, listPendingPurchasesClient } from "@/features/purchases/client";
+import { useAuth } from "@/features/auth/auth-context";
 
 export const Route = createFileRoute("/purchasing")({
   component: PurchasingPage,
 });
-
-interface SupplierQuote {
-  name: string;
-  price: number;
-  deadline: string;
-  notes: string;
-  isWinner: boolean;
-}
-
-interface PurchaseItem {
-  id: string;
-  title: string;
-  module: string;
-  category: "viagem" | "servico" | "frete" | "locacao" | "produto" | "manutencao";
-  requesterName: string;
-  requesterNotes: string;
-  totalValue: number;
-  approvalLevel: 1 | 2 | 3;
-  winCriteria: "price" | "deadline" | "price_deadline";
-  approvedBy: string;
-  approvedAt: string;
-  suppliers: SupplierQuote[];
-  status: "pendente" | "finalizado" | "encaminhado_v5";
-}
 
 const categoryConfig: Record<string, { label: string; icon: React.ReactNode; defaultV5: boolean }> = {
   viagem: { label: "Viagem", icon: <Plane className="h-4 w-4" />, defaultV5: false },
@@ -85,96 +67,96 @@ const approvalLevelBadge: Record<number, string> = {
   3: "bg-red-100 text-red-700 border-red-200",
 };
 
-const mockPurchases: PurchaseItem[] = [
-  {
-    id: "M1-000065",
-    title: "Parafusos Inox 304",
-    module: "M1 — Produtos",
-    category: "produto",
-    requesterName: "Carlos Silva",
-    requesterNotes: "Urgente para linha de montagem. Preferência por fornecedor com entrega rápida e que aceite boleto 30 dias.",
-    totalValue: 2300,
-    approvalLevel: 2,
-    winCriteria: "price",
-    approvedBy: "Diretor Financeiro",
-    approvedAt: "29/04/2026 14:30",
-    suppliers: [
-      { name: "Aço & Cia Ltda", price: 2300, deadline: "05/05/2026", notes: "Frete incluso, boleto 30 dias", isWinner: true },
-      { name: "Fastener Brasil", price: 2480, deadline: "03/05/2026", notes: "Frete por conta do comprador", isWinner: false },
-      { name: "Inox Center SP", price: 2650, deadline: "07/05/2026", notes: "Inclui certificado de qualidade", isWinner: false },
-    ],
-    status: "pendente",
-  },
-  {
-    id: "M2-000042",
-    title: "Viagem SP - Cliente ABC",
-    module: "M2 — Viagens",
-    category: "viagem",
-    requesterName: "Ana Rodrigues",
-    requesterNotes: "Reunião presencial com cliente ABC para fechamento de contrato.",
-    totalValue: 1200,
-    approvalLevel: 1,
-    winCriteria: "price_deadline",
-    approvedBy: "Gerente Operacional",
-    approvedAt: "28/04/2026 09:15",
-    suppliers: [
-      { name: "Viaje Bem Turismo", price: 1200, deadline: "01/05/2026", notes: "Inclui aéreo + hotel 2 noites", isWinner: true },
-      { name: "CVC Corporativo", price: 1350, deadline: "01/05/2026", notes: "Apenas aéreo, hotel separado", isWinner: false },
-    ],
-    status: "pendente",
-  },
-  {
-    id: "M3-000018",
-    title: "Consultoria ERP Financeiro",
-    module: "M3 — Serviços",
-    category: "servico",
-    requesterName: "Roberto Lima",
-    requesterNotes: "Necessidade de consultoria especializada para implantação do módulo financeiro.",
-    totalValue: 50000,
-    approvalLevel: 3,
-    winCriteria: "deadline",
-    approvedBy: "Diretoria",
-    approvedAt: "27/04/2026 16:00",
-    suppliers: [
-      { name: "Tech Solutions SA", price: 52000, deadline: "01/06/2026", notes: "Equipe de 3 consultores", isWinner: true },
-      { name: "ConsultERP Ltda", price: 48000, deadline: "15/06/2026", notes: "Equipe de 2 consultores", isWinner: false },
-      { name: "Digital Corp", price: 55000, deadline: "10/06/2026", notes: "Inclui treinamento", isWinner: false },
-    ],
-    status: "pendente",
-  },
-];
-
 function PurchasingPage() {
-  const [items, setItems] = useState<PurchaseItem[]>(mockPurchases);
+  const { session } = useAuth();
+  const router = useRouter();
+  const [items, setItems] = useState<PurchaseItem[]>([]);
   const [selected, setSelected] = useState<PurchaseItem | null>(null);
   const [sendToV5, setSendToV5] = useState(false);
   const [v5Reason, setV5Reason] = useState("");
+  const [purchaseOrderNumber, setPurchaseOrderNumber] = useState("");
+  const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("");
+  const [notes, setNotes] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (!session) return;
+    void listPendingPurchasesClient().then(setItems);
+  }, [session]);
 
   const openDetail = (item: PurchaseItem) => {
     setSelected(item);
     setSendToV5(categoryConfig[item.category]?.defaultV5 ?? false);
     setV5Reason("");
+    setPurchaseOrderNumber("");
+    setInvoiceNumber("");
+    setPaymentMethod("");
+    setNotes("");
   };
 
-  const handleFinalize = () => {
-    if (!selected) return;
-    setItems((prev) =>
-      prev.map((it) =>
-        it.id === selected.id
-          ? { ...it, status: sendToV5 ? "encaminhado_v5" as const : "finalizado" as const }
-          : it
-      )
-    );
+  const closeDialog = () => {
     setSelected(null);
+    setSendToV5(false);
+    setV5Reason("");
+    setPurchaseOrderNumber("");
+    setInvoiceNumber("");
+    setPaymentMethod("");
+    setNotes("");
   };
 
-  const pending = items.filter((i) => i.status === "pendente");
-  const finalized = items.filter((i) => i.status === "finalizado");
-  const forwarded = items.filter((i) => i.status === "encaminhado_v5");
+  const handleFinalize = async () => {
+    if (!selected) return;
+
+    const winner = selected.suppliers.find((supplier) => supplier.isWinner);
+
+    if (!winner) {
+      toast.error("Não foi possível identificar o fornecedor vencedor.");
+      return;
+    }
+
+    if (!purchaseOrderNumber.trim()) {
+      toast.error("Informe o número do pedido de compra.");
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      await confirmPurchaseClient({
+        requisitionId: selected.requisitionId,
+        approvalId: selected.approvalId,
+        supplierName: winner.name,
+        supplierPrice: winner.price,
+        purchaseOrderNumber,
+        invoiceNumber,
+        paymentMethod,
+        notes: sendToV5 && v5Reason.trim()
+          ? [notes.trim(), `Motivo V5: ${v5Reason.trim()}`].filter(Boolean).join("\n")
+          : notes,
+        requiresReceipt: sendToV5,
+      });
+
+      toast.success(
+        sendToV5
+          ? "Compra finalizada e encaminhada para recebimento."
+          : "Compra finalizada com sucesso.",
+      );
+      closeDialog();
+      setItems(await listPendingPurchasesClient());
+      await router.invalidate();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível finalizar a compra.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const pending = items;
 
   return (
+    <AccessGuard roles={["admin", "comprador"]}>
     <div className="max-w-5xl mx-auto space-y-6">
-      {/* Header */}
       <div className="flex items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent">
           <ShoppingCart className="h-5 w-5 text-vp-yellow-dark" />
@@ -185,7 +167,6 @@ function PurchasingPage() {
         </div>
       </div>
 
-      {/* Summary */}
       <div className="grid grid-cols-3 gap-3">
         <Card className="card-hover-yellow">
           <CardContent className="p-4 text-center">
@@ -195,20 +176,23 @@ function PurchasingPage() {
         </Card>
         <Card className="card-hover-yellow">
           <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-foreground">{finalized.length}</p>
-            <p className="text-xs text-muted-foreground mt-1">Finalizadas</p>
+            <p className="text-2xl font-bold text-foreground">
+              {pending.filter((item) => categoryConfig[item.category]?.defaultV5).length}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">Tendem a ir para V5</p>
           </CardContent>
         </Card>
         <Card className="card-hover-yellow">
           <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-foreground">{forwarded.length}</p>
-            <p className="text-xs text-muted-foreground mt-1">Encaminhadas V5</p>
+            <p className="text-2xl font-bold text-foreground">
+              {pending.filter((item) => !categoryConfig[item.category]?.defaultV5).length}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">Podem encerrar em V4</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Pending items */}
-      {pending.length === 0 && finalized.length === 0 && forwarded.length === 0 && (
+      {pending.length === 0 && (
         <Card className="card-hover-yellow">
           <CardContent className="p-12 text-center">
             <ShoppingCart className="h-12 w-12 mx-auto text-muted-foreground/40 mb-4" />
@@ -223,8 +207,9 @@ function PurchasingPage() {
           {pending.map((item) => {
             const winner = item.suppliers.find((s) => s.isWinner);
             const cat = categoryConfig[item.category];
+
             return (
-              <Card key={item.id} className="card-hover-yellow">
+              <Card key={item.approvalId} className="card-hover-yellow">
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
@@ -232,7 +217,7 @@ function PurchasingPage() {
                       <div>
                         <p className="font-semibold text-foreground text-sm">{item.title}</p>
                         <p className="text-xs text-muted-foreground">
-                          {item.module} • {item.requesterName} • Aprovado por {item.approvedBy}
+                          {item.module} • {item.requesterName} • {item.approvedAt}
                         </p>
                       </div>
                     </div>
@@ -263,50 +248,12 @@ function PurchasingPage() {
         </div>
       )}
 
-      {/* Finalized */}
-      {finalized.length > 0 && (
-        <div className="space-y-3">
-          <p className="text-sm font-semibold text-muted-foreground">Finalizadas em V4</p>
-          {finalized.map((item) => (
-            <Card key={item.id} className="opacity-70">
-              <CardContent className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  <Badge variant="outline" className="font-mono text-xs">{item.id}</Badge>
-                  <span className="text-sm text-foreground">{item.title}</span>
-                </div>
-                <span className="text-xs text-muted-foreground">Compra finalizada</span>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {/* Forwarded to V5 */}
-      {forwarded.length > 0 && (
-        <div className="space-y-3">
-          <p className="text-sm font-semibold text-muted-foreground">Encaminhadas para V5 — Recebimento</p>
-          {forwarded.map((item) => (
-            <Card key={item.id} className="opacity-70 border-dashed">
-              <CardContent className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <ArrowRight className="h-4 w-4 text-blue-500" />
-                  <Badge variant="outline" className="font-mono text-xs">{item.id}</Badge>
-                  <span className="text-sm text-foreground">{item.title}</span>
-                </div>
-                <span className="text-xs text-muted-foreground">Aguardando recebimento</span>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {/* Detail Dialog */}
-      <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
+      <Dialog open={!!selected} onOpenChange={(open) => !open && closeDialog()}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           {selected && (() => {
             const winner = selected.suppliers.find((s) => s.isWinner);
             const cat = categoryConfig[selected.category];
+
             return (
               <>
                 <DialogHeader>
@@ -321,15 +268,13 @@ function PurchasingPage() {
                   </p>
                 </DialogHeader>
 
-                {/* Approved info banner */}
                 <div className="rounded-lg bg-green-50 border border-green-200 p-3 flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-green-600" />
                   <span className="text-sm text-green-700">
-                    Aprovado por <strong>{selected.approvedBy}</strong> em {selected.approvedAt}
+                    Aprovado em V3. Os dados abaixo devem seguir o aprovado sem alterações.
                   </span>
                 </div>
 
-                {/* Requester notes */}
                 <Card className="border-dashed border-vp-yellow/50">
                   <CardContent className="p-4">
                     <p className="text-xs font-semibold text-muted-foreground mb-1">
@@ -339,7 +284,6 @@ function PurchasingPage() {
                   </CardContent>
                 </Card>
 
-                {/* Win criteria */}
                 <div className="flex items-center gap-2 rounded-lg bg-accent/50 p-3">
                   {winCriteriaIcon[selected.winCriteria]}
                   <span className="text-sm font-semibold text-foreground">
@@ -347,14 +291,13 @@ function PurchasingPage() {
                   </span>
                 </div>
 
-                {/* Suppliers (readonly) */}
                 <div className="space-y-3">
                   <p className="text-sm font-semibold text-foreground">
                     Fornecedores Cotados ({selected.suppliers.length})
                   </p>
                   {selected.suppliers.map((sup, i) => (
                     <Card
-                      key={i}
+                      key={`${selected.approvalId}-${i}`}
                       className={`border ${sup.isWinner ? "border-vp-yellow bg-vp-yellow/5 ring-1 ring-vp-yellow/30" : "border-border"}`}
                     >
                       <CardContent className="p-4">
@@ -375,14 +318,40 @@ function PurchasingPage() {
                           <div className="flex items-center gap-1">
                             <Clock className="h-3 w-3" /> Prazo: {sup.deadline}
                           </div>
-                          <div>Obs: {sup.notes}</div>
+                          <div>Obs: {sup.notes || "—"}</div>
                         </div>
                       </CardContent>
                     </Card>
                   ))}
                 </div>
 
-                {/* V5 routing exception */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-medium">Número do Pedido *</Label>
+                    <Input
+                      placeholder="Ex.: PC-2026-0012"
+                      value={purchaseOrderNumber}
+                      onChange={(e) => setPurchaseOrderNumber(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-medium">Número da NF</Label>
+                    <Input
+                      placeholder="Opcional"
+                      value={invoiceNumber}
+                      onChange={(e) => setInvoiceNumber(e.target.value)}
+                    />
+                  </div>
+                  <div className="col-span-2 space-y-1.5">
+                    <Label className="text-sm font-medium">Forma de Pagamento</Label>
+                    <Input
+                      placeholder="Ex.: boleto 28 dias"
+                      value={paymentMethod}
+                      onChange={(e) => setPaymentMethod(e.target.value)}
+                    />
+                  </div>
+                </div>
+
                 <Card className="border border-dashed">
                   <CardContent className="p-4 space-y-3">
                     <div className="flex items-start gap-3">
@@ -402,17 +371,28 @@ function PurchasingPage() {
                         </p>
                       </div>
                     </div>
+
                     {sendToV5 && (
                       <div className="space-y-1.5">
-                        <Label className="text-xs text-muted-foreground">Motivo do encaminhamento (opcional)</Label>
+                        <Label className="text-xs text-muted-foreground">Motivo do encaminhamento</Label>
                         <Textarea
-                          placeholder="Ex.: necessita comprovação de entrega, controle de estoque..."
+                          placeholder="Ex.: necessita conferência física, entrada em estoque ou comprovação de entrega."
                           value={v5Reason}
                           onChange={(e) => setV5Reason(e.target.value)}
                           rows={2}
                         />
                       </div>
                     )}
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Observações da compra</Label>
+                      <Textarea
+                        placeholder="Condições comerciais, observações internas, instruções adicionais..."
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        rows={3}
+                      />
+                    </div>
                   </CardContent>
                 </Card>
 
@@ -426,10 +406,10 @@ function PurchasingPage() {
                 )}
 
                 <DialogFooter className="gap-2">
-                  <Button variant="ghost" onClick={() => setSelected(null)}>
+                  <Button variant="ghost" onClick={closeDialog}>
                     Cancelar
                   </Button>
-                  <Button variant="vp" onClick={handleFinalize} className="gap-1">
+                  <Button variant="vp" onClick={handleFinalize} className="gap-1" disabled={isSaving}>
                     {sendToV5 ? (
                       <><ArrowRight className="h-4 w-4" /> Finalizar e Encaminhar V5</>
                     ) : (
@@ -443,5 +423,6 @@ function PurchasingPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </AccessGuard>
   );
 }

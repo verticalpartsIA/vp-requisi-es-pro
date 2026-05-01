@@ -27,6 +27,9 @@ import {
   SidebarFooter,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/features/auth/auth-context";
+import { toast } from "sonner";
 
 const modules = [
   { title: "M1 - Produtos", url: "/products", icon: Package },
@@ -53,11 +56,36 @@ const system = [
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
+  const { profile, roles, signOut, hasRole } = useAuth();
   const currentPath = useRouterState({
     select: (s) => s.location.pathname,
   });
 
   const isActive = (path: string) => currentPath === path;
+
+  const visibleModules = modules.filter(() => roles.length > 0);
+  const visibleWorkflows = workflows.filter((item) => {
+    if (hasRole("admin")) return true;
+    if (item.url === "/quoting" || item.url === "/purchasing") return hasRole("comprador");
+    if (item.url === "/approval") return hasRole("aprovador");
+    if (item.url === "/receipt") return hasRole("almoxarife");
+    return false;
+  });
+  const visibleSystem = system.filter((item) => {
+    if (item.url === "/") return true;
+    if (item.url === "/analytics") return hasRole("admin") || hasRole("comprador") || hasRole("aprovador");
+    if (item.url === "/logs") return hasRole("admin");
+    return false;
+  });
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      toast.success("Sessão encerrada com sucesso.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível sair agora.");
+    }
+  };
 
   const renderGroup = (label: string, items: typeof modules) => (
     <SidebarGroup>
@@ -106,17 +134,25 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent className="px-2">
-        {renderGroup("Sistema", system)}
-        {renderGroup("Requisições", modules)}
-        {renderGroup("Fluxos", workflows)}
+        {visibleSystem.length > 0 && renderGroup("Sistema", visibleSystem)}
+        {visibleModules.length > 0 && renderGroup("Requisições", visibleModules)}
+        {visibleWorkflows.length > 0 && renderGroup("Fluxos", visibleWorkflows)}
       </SidebarContent>
 
       <SidebarFooter className="p-4">
         {!collapsed && (
-          <div className="rounded-lg bg-sidebar-accent p-3">
-            <p className="text-xs text-sidebar-foreground/60">
-              VPRequisições v1.0
-            </p>
+          <div className="rounded-lg bg-sidebar-accent p-3 space-y-3">
+            <div>
+              <p className="text-sm font-semibold text-sidebar-foreground">
+                {profile?.full_name || profile?.email || "Usuário autenticado"}
+              </p>
+              <p className="text-[11px] text-sidebar-foreground/60">
+                {(roles.length > 0 ? roles.join(" • ") : "Sem papel definido").replaceAll("_", " ")}
+              </p>
+            </div>
+            <Button variant="outline" size="sm" className="w-full" onClick={handleSignOut}>
+              Sair
+            </Button>
           </div>
         )}
       </SidebarFooter>

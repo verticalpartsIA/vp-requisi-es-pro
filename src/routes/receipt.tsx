@@ -1,5 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { PackageCheck, Truck, User, Building2, ClipboardCheck, AlertTriangle, CheckCircle2, Eye } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,68 +7,38 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { type PendingReceiptItem } from "@/features/receipts/api";
 import { toast } from "sonner";
+import { AccessGuard } from "@/components/access-guard";
+import { listPendingReceiptsClient, registerReceiptClient } from "@/features/receipts/client";
+import { useAuth } from "@/features/auth/auth-context";
 
 export const Route = createFileRoute("/receipt")({
   component: ReceiptPage,
 });
 
-interface PendingReceipt {
-  id: string;
-  requisition: string;
-  description: string;
-  supplier: string;
-  requester: string;
-  category: string;
-  purchaseDate: string;
-}
-
-const mockPending: PendingReceipt[] = [
-  {
-    id: "REC-001",
-    requisition: "REQ-2024-042",
-    description: "Rolamentos SKF 6205",
-    supplier: "SKF Brasil Ltda",
-    requester: "Carlos Mendes",
-    category: "produto",
-    purchaseDate: "2024-03-15",
-  },
-  {
-    id: "REC-002",
-    requisition: "REQ-2024-038",
-    description: "Chapas de aço 3mm (lote 50un)",
-    supplier: "Aço Forte Distribuidora",
-    requester: "Fernanda Lima",
-    category: "produto",
-    purchaseDate: "2024-03-12",
-  },
-  {
-    id: "REC-003",
-    requisition: "REQ-2024-045",
-    description: "Parafusos M10x50 (caixa 500un)",
-    supplier: "Fixadores Nacional",
-    requester: "Roberto Alves",
-    category: "produto",
-    purchaseDate: "2024-03-18",
-  },
-];
-
 type Condition = "ok" | "damaged" | "mismatch" | "";
 
 function ReceiptPage() {
-  const [pendingItems, setPendingItems] = useState<PendingReceipt[]>(mockPending);
-  const [completedItems, setCompletedItems] = useState<PendingReceipt[]>([]);
-  const [selectedItem, setSelectedItem] = useState<PendingReceipt | null>(null);
+  const { session } = useAuth();
+  const router = useRouter();
+  const [pendingItems, setPendingItems] = useState<PendingReceiptItem[]>([]);
+  const [selectedItem, setSelectedItem] = useState<PendingReceiptItem | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-
   const [delivererName, setDelivererName] = useState("");
   const [carrierCompany, setCarrierCompany] = useState("");
   const [condition, setCondition] = useState<Condition>("");
   const [notes, setNotes] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (!session) return;
+    void listPendingReceiptsClient().then(setPendingItems);
+  }, [session]);
 
   const needsNotes = condition === "damaged" || condition === "mismatch";
 
-  const openReceiptForm = (item: PendingReceipt) => {
+  const openReceiptForm = (item: PendingReceiptItem) => {
     setSelectedItem(item);
     setDelivererName("");
     setCarrierCompany("");
@@ -77,7 +47,16 @@ function ReceiptPage() {
     setDialogOpen(true);
   };
 
-  const handleSubmit = () => {
+  const closeDialog = () => {
+    setSelectedItem(null);
+    setDialogOpen(false);
+    setDelivererName("");
+    setCarrierCompany("");
+    setCondition("");
+    setNotes("");
+  };
+
+  const handleSubmit = async () => {
     if (!condition) {
       toast.error("Selecione a conformidade do produto.");
       return;
@@ -88,15 +67,32 @@ function ReceiptPage() {
     }
     if (!selectedItem) return;
 
-    setPendingItems((prev) => prev.filter((i) => i.id !== selectedItem.id));
-    setCompletedItems((prev) => [...prev, selectedItem]);
-    setDialogOpen(false);
+    setIsSaving(true);
 
-    if (condition === "ok") {
-      toast.success("Recebimento registrado com sucesso. Estoque atualizado.");
-    } else {
-      toast.success("Recebimento registrado com sucesso. Estoque atualizado.");
-      toast.info(`Requisitante ${selectedItem.requester} notificado automaticamente sobre a não conformidade.`);
+    try {
+      const result = await registerReceiptClient({
+        requisitionId: selectedItem.requisitionId,
+        purchaseId: selectedItem.purchaseId,
+        delivererName,
+        carrierCompany,
+        condition: condition as "ok" | "damaged" | "mismatch",
+        notes,
+      });
+
+      closeDialog();
+      setPendingItems(await listPendingReceiptsClient());
+      await router.invalidate();
+
+      if (result.condition === "ok") {
+        toast.success("Recebimento registrado com sucesso. Fluxo concluído.");
+      } else {
+        toast.success("Recebimento registrado com não conformidade.");
+        toast.info("O item foi devolvido ao fluxo de compra para tratativa.");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível registrar o recebimento.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -108,6 +104,7 @@ function ReceiptPage() {
   };
 
   return (
+    <AccessGuard roles={["admin", "almoxarife"]}>
     <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent">
@@ -119,7 +116,6 @@ function ReceiptPage() {
         </div>
       </div>
 
-      {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="card-hover-yellow">
           <CardContent className="p-4 flex items-center gap-3">
@@ -138,8 +134,8 @@ function ReceiptPage() {
               <CheckCircle2 className="h-5 w-5 text-green-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold">{completedItems.length}</p>
-              <p className="text-xs text-muted-foreground">Recebidos</p>
+              <p className="text-2xl font-bold">Fluxo final</p>
+              <p className="text-xs text-muted-foreground">Recepção física e conferência</p>
             </div>
           </CardContent>
         </Card>
@@ -149,14 +145,13 @@ function ReceiptPage() {
               <AlertTriangle className="h-5 w-5 text-red-500" />
             </div>
             <div>
-              <p className="text-2xl font-bold">0</p>
-              <p className="text-xs text-muted-foreground">Não Conformidades</p>
+              <p className="text-2xl font-bold">Tratativa</p>
+              <p className="text-xs text-muted-foreground">Avarias voltam para compra</p>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Pending list */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Entregas Pendentes</CardTitle>
@@ -170,18 +165,22 @@ function ReceiptPage() {
           ) : (
             pendingItems.map((item) => (
               <div
-                key={item.id}
+                key={item.purchaseId}
                 className="flex items-center justify-between p-4 rounded-lg border hover:border-vp-yellow transition-colors"
               >
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-sm">{item.id}</span>
                     <Badge variant="outline" className="text-xs">{item.requisition}</Badge>
+                    {item.purchaseOrderNumber && (
+                      <Badge variant="secondary" className="text-xs">Pedido {item.purchaseOrderNumber}</Badge>
+                    )}
                   </div>
                   <p className="text-sm font-medium">{item.description}</p>
                   <div className="flex items-center gap-4 text-xs text-muted-foreground">
                     <span className="flex items-center gap-1"><Building2 className="h-3 w-3" />{item.supplier}</span>
                     <span className="flex items-center gap-1"><User className="h-3 w-3" />{item.requester}</span>
+                    <span>{item.purchaseDate}</span>
                   </div>
                 </div>
                 <Button variant="vp" size="sm" onClick={() => openReceiptForm(item)}>
@@ -193,8 +192,7 @@ function ReceiptPage() {
         </CardContent>
       </Card>
 
-      {/* Receipt Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => !open && closeDialog()}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Recebimento de Materiais</DialogTitle>
@@ -204,19 +202,23 @@ function ReceiptPage() {
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* Read-only info */}
             <div className="rounded-lg bg-muted/50 p-3 space-y-1 text-sm">
-              <div className="flex justify-between">
+              <div className="flex justify-between gap-3">
                 <span className="text-muted-foreground">Requisitante Original</span>
-                <span className="font-medium">{selectedItem?.requester}</span>
+                <span className="font-medium text-right">{selectedItem?.requester}</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between gap-3">
                 <span className="text-muted-foreground">Fornecedor</span>
-                <span className="font-medium">{selectedItem?.supplier}</span>
+                <span className="font-medium text-right">{selectedItem?.supplier}</span>
               </div>
+              {selectedItem?.invoiceNumber && (
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">NF</span>
+                  <span className="font-medium text-right">{selectedItem.invoiceNumber}</span>
+                </div>
+              )}
             </div>
 
-            {/* Deliverer */}
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Nome do Entregador (opcional)</label>
               <Input
@@ -226,7 +228,6 @@ function ReceiptPage() {
               />
             </div>
 
-            {/* Carrier */}
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Empresa que Entregou (opcional)</label>
               <Input
@@ -236,7 +237,6 @@ function ReceiptPage() {
               />
             </div>
 
-            {/* Condition */}
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Conformidade do Produto</label>
               <div className="grid grid-cols-3 gap-2">
@@ -264,7 +264,6 @@ function ReceiptPage() {
               </div>
             </div>
 
-            {/* Conditional notes */}
             {needsNotes && (
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-red-600">
@@ -281,15 +280,16 @@ function ReceiptPage() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
+            <Button variant="outline" onClick={closeDialog}>
               Cancelar
             </Button>
-            <Button variant="vp" onClick={handleSubmit}>
+            <Button variant="vp" onClick={handleSubmit} disabled={isSaving}>
               <PackageCheck className="h-4 w-4 mr-1" /> Finalizar Recebimento
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
+    </AccessGuard>
   );
 }

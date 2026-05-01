@@ -13,9 +13,12 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useEffect, useState } from "react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { getDashboardDataClient } from "@/features/dashboard/client";
+import { useAuth } from "@/features/auth/auth-context";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -26,30 +29,6 @@ export const Route = createFileRoute("/")({
   }),
   component: Index,
 });
-
-const stats = [
-  { label: "Tickets Abertos", value: "24", icon: Clock, trend: "+3 hoje" },
-  { label: "Em Cotação", value: "8", icon: AlertTriangle, trend: "2 urgentes" },
-  { label: "Aprovados", value: "12", icon: CheckCircle2, trend: "+5 semana" },
-  { label: "Concluídos (mês)", value: "47", icon: TrendingUp, trend: "+12%" },
-];
-
-const modules = [
-  { title: "Produtos", desc: "Materiais, insumos e equipamentos", icon: Package, url: "/products", tag: "M1", count: 6 },
-  { title: "Viagens", desc: "Passagens, hotel e despesas", icon: Plane, url: "/trips", tag: "M2", count: 3 },
-  { title: "Serviços", desc: "Consultoria, manutenção e projetos", icon: Wrench, url: "/services", tag: "M3", count: 4 },
-  { title: "Manutenção", desc: "Corretiva, preventiva e preditiva", icon: HardHat, url: "/maintenance", tag: "M4", count: 5 },
-  { title: "Frete", desc: "Transporte e logística", icon: Truck, url: "/freight", tag: "M5", count: 2 },
-  { title: "Locação", desc: "Equipamentos e veículos temporários", icon: Key, url: "/rental", tag: "M6", count: 1 },
-];
-
-const recentTickets = [
-  { id: "M1-000065", module: "M1", title: "Parafusos Inox 304 M10x50mm", urgency: "HIGH", status: "COTAÇÃO", date: "28/04" },
-  { id: "M2-000042", module: "M2", title: "Viagem SP - Cliente ABC", urgency: "MEDIUM", status: "APROVAÇÃO", date: "27/04" },
-  { id: "M4-000031", module: "M4", title: "Prensa Hidráulica - Vazamento", urgency: "URGENT", status: "ABERTO", date: "25/04" },
-  { id: "M5-000028", module: "M5", title: "Frete Chapas Aço - SP→CWB", urgency: "MEDIUM", status: "COMPRA", date: "24/04" },
-  { id: "M3-000018", module: "M3", title: "Consultoria ERP Financeiro", urgency: "LOW", status: "COTAÇÃO", date: "22/04" },
-];
 
 const urgencyLabel: Record<string, string> = {
   URGENT: "Urgente",
@@ -74,6 +53,27 @@ function statusColor(s: string) {
 }
 
 function Index() {
+  const { session } = useAuth();
+  const [data, setData] = useState<Awaited<ReturnType<typeof getDashboardDataClient>> | null>(null);
+
+  useEffect(() => {
+    if (!session) return;
+    void getDashboardDataClient().then(setData);
+  }, [session]);
+
+  const stats = data?.stats || [];
+  const modules = data?.modules || [];
+  const recentTickets = data?.recentTickets || [];
+  const moduleIcons = {
+    M1: Package,
+    M2: Plane,
+    M3: Wrench,
+    M4: HardHat,
+    M5: Truck,
+    M6: Key,
+  } as const;
+  const statIcons = [Clock, AlertTriangle, CheckCircle2, TrendingUp] as const;
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* Header */}
@@ -88,43 +88,51 @@ function Index() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 animate-fade-in-up" style={{ animationDelay: "0.1s" }}>
-        {stats.map((s) => (
-          <Card key={s.label} className="card-hover-yellow">
-            <CardContent className="p-4 flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent">
-                <s.icon className="h-5 w-5 text-vp-yellow-dark" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-foreground">{s.value}</p>
-                <p className="text-xs text-muted-foreground">{s.label}</p>
-                <p className="text-[10px] text-vp-yellow-dark font-medium mt-0.5">{s.trend}</p>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+        {stats.map((s, index) => {
+          const Icon = statIcons[index] || Clock;
+
+          return (
+            <Card key={s.label} className="card-hover-yellow">
+              <CardContent className="p-4 flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent">
+                  <Icon className="h-5 w-5 text-vp-yellow-dark" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-foreground">{s.value}</p>
+                  <p className="text-xs text-muted-foreground">{s.label}</p>
+                  <p className="text-[10px] text-vp-yellow-dark font-medium mt-0.5">{s.trend}</p>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       {/* Modules */}
       <div className="animate-fade-in-up" style={{ animationDelay: "0.2s" }}>
         <h2 className="text-lg font-semibold text-foreground mb-3">Nova Requisição</h2>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          {modules.map((m) => (
-            <Link key={m.tag} to={m.url}>
-              <Card className="card-hover-yellow cursor-pointer h-full">
-                <CardContent className="p-4 text-center flex flex-col items-center gap-2">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent">
-                    <m.icon className="h-6 w-6 text-vp-yellow-dark" />
-                  </div>
-                  <div>
-                    <Badge variant="outline" className="text-[10px] mb-1">{m.tag}</Badge>
-                    <p className="text-sm font-semibold text-foreground">{m.title}</p>
-                    <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">{m.desc}</p>
-                  </div>
-                  <span className="text-xs text-vp-yellow-dark font-medium">{m.count} abertos</span>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
+          {modules.map((m) => {
+            const Icon = moduleIcons[m.tag];
+
+            return (
+              <Link key={m.tag} to={m.url}>
+                <Card className="card-hover-yellow cursor-pointer h-full">
+                  <CardContent className="p-4 text-center flex flex-col items-center gap-2">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent">
+                      <Icon className="h-6 w-6 text-vp-yellow-dark" />
+                    </div>
+                    <div>
+                      <Badge variant="outline" className="text-[10px] mb-1">{m.tag}</Badge>
+                      <p className="text-sm font-semibold text-foreground">{m.title}</p>
+                      <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">{m.desc}</p>
+                    </div>
+                    <span className="text-xs text-vp-yellow-dark font-medium">{m.count} abertos</span>
+                  </CardContent>
+                </Card>
+              </Link>
+            );
+          })}
         </div>
       </div>
 
@@ -167,6 +175,13 @@ function Index() {
                       <td className="p-3 text-muted-foreground text-xs">{t.date}</td>
                     </tr>
                   ))}
+                  {recentTickets.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="p-6 text-center text-sm text-muted-foreground">
+                        Nenhum ticket encontrado ainda.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

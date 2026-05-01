@@ -1,6 +1,8 @@
-import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
+import { Outlet, Link, Navigate, createRootRoute, HeadContent, Scripts, useRouterState } from "@tanstack/react-router";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
+import { Toaster } from "@/components/ui/sonner";
+import { AuthProvider, useAuth } from "@/features/auth/auth-context";
 
 import appCss from "../styles.css?url";
 
@@ -58,6 +60,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         {children}
+        <Toaster richColors />
         <Scripts />
       </body>
     </html>
@@ -65,6 +68,42 @@ function RootShell({ children }: { children: React.ReactNode }) {
 }
 
 function RootComponent() {
+  return (
+    <AuthProvider>
+      <ProtectedApp />
+    </AuthProvider>
+  );
+}
+
+function ProtectedApp() {
+  const { isLoading, session } = useAuth();
+  const currentPath = useRouterState({
+    select: (state) => state.location.pathname,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <div className="text-center">
+          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-vp-yellow/30 border-t-vp-yellow" />
+          <p className="mt-4 text-sm text-muted-foreground">Validando acesso...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!session && currentPath !== "/login") {
+    return <Navigate to="/login" search={{ redirect: currentPath }} />;
+  }
+
+  if (session && currentPath === "/login") {
+    return <Navigate to="/" />;
+  }
+
+  if (currentPath === "/login") {
+    return <Outlet />;
+  }
+
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">

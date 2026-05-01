@@ -18,6 +18,7 @@ import { Route as PurchasingRouteImport } from './routes/purchasing'
 import { Route as ProductsRouteImport } from './routes/products'
 import { Route as MaintenanceRouteImport } from './routes/maintenance'
 import { Route as LogsRouteImport } from './routes/logs'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as FreightRouteImport } from './routes/freight'
 import { Route as ApprovalRouteImport } from './routes/approval'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
@@ -68,6 +69,11 @@ const LogsRoute = LogsRouteImport.update({
   path: '/logs',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FreightRoute = FreightRouteImport.update({
   id: '/freight',
   path: '/freight',
@@ -94,6 +100,7 @@ export interface FileRoutesByFullPath {
   '/analytics': typeof AnalyticsRoute
   '/approval': typeof ApprovalRoute
   '/freight': typeof FreightRoute
+  '/login': typeof LoginRoute
   '/logs': typeof LogsRoute
   '/maintenance': typeof MaintenanceRoute
   '/products': typeof ProductsRoute
@@ -109,6 +116,7 @@ export interface FileRoutesByTo {
   '/analytics': typeof AnalyticsRoute
   '/approval': typeof ApprovalRoute
   '/freight': typeof FreightRoute
+  '/login': typeof LoginRoute
   '/logs': typeof LogsRoute
   '/maintenance': typeof MaintenanceRoute
   '/products': typeof ProductsRoute
@@ -125,6 +133,7 @@ export interface FileRoutesById {
   '/analytics': typeof AnalyticsRoute
   '/approval': typeof ApprovalRoute
   '/freight': typeof FreightRoute
+  '/login': typeof LoginRoute
   '/logs': typeof LogsRoute
   '/maintenance': typeof MaintenanceRoute
   '/products': typeof ProductsRoute
@@ -142,6 +151,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/approval'
     | '/freight'
+    | '/login'
     | '/logs'
     | '/maintenance'
     | '/products'
@@ -157,6 +167,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/approval'
     | '/freight'
+    | '/login'
     | '/logs'
     | '/maintenance'
     | '/products'
@@ -172,6 +183,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/approval'
     | '/freight'
+    | '/login'
     | '/logs'
     | '/maintenance'
     | '/products'
@@ -188,6 +200,7 @@ export interface RootRouteChildren {
   AnalyticsRoute: typeof AnalyticsRoute
   ApprovalRoute: typeof ApprovalRoute
   FreightRoute: typeof FreightRoute
+  LoginRoute: typeof LoginRoute
   LogsRoute: typeof LogsRoute
   MaintenanceRoute: typeof MaintenanceRoute
   ProductsRoute: typeof ProductsRoute
@@ -264,6 +277,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LogsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/freight': {
       id: '/freight'
       path: '/freight'
@@ -300,6 +320,7 @@ const rootRouteChildren: RootRouteChildren = {
   AnalyticsRoute: AnalyticsRoute,
   ApprovalRoute: ApprovalRoute,
   FreightRoute: FreightRoute,
+  LoginRoute: LoginRoute,
   LogsRoute: LogsRoute,
   MaintenanceRoute: MaintenanceRoute,
   ProductsRoute: ProductsRoute,
