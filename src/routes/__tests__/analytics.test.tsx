@@ -162,7 +162,6 @@ describe("Analytics — Financial", () => {
   });
 
   describe("Monthly Savings", () => {
-  describe("Monthly Savings", () => {
     const months = [
       { month: "Jan/26", original: 3_200_000, final: 2_800_000, savings: 400_000 },
       { month: "Fev/26", original: 3_800_000, final: 3_420_000, savings: 380_000 },
