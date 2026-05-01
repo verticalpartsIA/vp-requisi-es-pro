@@ -341,6 +341,18 @@ function AnalyticsPage() {
       )}
 
       {/* KPI Row */}
+
+      {/* View Tabs */}
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
+        <TabsList className="grid grid-cols-4 w-full max-w-lg">
+          <TabsTrigger value="executive">Executivo</TabsTrigger>
+          <TabsTrigger value="sla">SLA</TabsTrigger>
+          <TabsTrigger value="financial">Financeiro</TabsTrigger>
+          <TabsTrigger value="operational">Operacional</TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      {/* KPI Row — always visible */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="card-hover-yellow">
           <CardContent className="p-4">
