@@ -1032,42 +1032,91 @@ function AnalyticsPage() {
 
     {/* Export Dialog */}
     <Dialog open={exportOpen} onOpenChange={setExportOpen}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Download className="h-5 w-5" />
-            Exportar Dashboard
+            Exportar Relatório
           </DialogTitle>
           <DialogDescription>
-            Selecione o formato de exportação
+            Gere um relatório para download
           </DialogDescription>
         </DialogHeader>
-        <div className="grid grid-cols-2 gap-3 mt-2">
-          {[
-            { label: "PDF", desc: "Relatório completo com gráficos", icon: FileText },
-            { label: "Excel", desc: "Dados brutos + tabelas dinâmicas", icon: FileSpreadsheet },
-            { label: "CSV", desc: "Dados tabulares simples", icon: FileSpreadsheet },
-            { label: "PNG", desc: "Imagem do dashboard", icon: Image },
-          ].map((opt) => (
-            <button
-              key={opt.label}
-              className="flex flex-col items-center gap-2 rounded-lg border-2 border-border p-4 hover:border-[var(--vp-yellow)] transition-colors cursor-pointer"
-              onClick={() => {
-                setExportOpen(false);
-              }}
-            >
-              <opt.icon className="h-6 w-6 text-muted-foreground" />
-              <span className="text-sm font-medium text-foreground">{opt.label}</span>
-              <span className="text-[10px] text-muted-foreground text-center leading-tight">
-                {opt.desc}
-              </span>
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
-          <input type="checkbox" id="include-raw" className="rounded" />
-          <label htmlFor="include-raw">Incluir dados brutos</label>
-        </div>
+        {!exportResult ? (
+          <div className="space-y-5 mt-2">
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Tipo de Relatório</Label>
+              <RadioGroup value={exportReportType} onValueChange={(v) => setExportReportType(v as typeof exportReportType)} className="grid grid-cols-2 gap-2">
+                {[
+                  { value: "executive" as const, label: "Executivo" },
+                  { value: "sla" as const, label: "SLA" },
+                  { value: "financial" as const, label: "Financeiro" },
+                  { value: "operational" as const, label: "Operacional" },
+                ].map((opt) => (
+                  <Label key={opt.value} htmlFor={`rt-${opt.value}`} className={`flex items-center gap-2 rounded-lg border-2 p-3 cursor-pointer transition-all hover:border-[var(--vp-yellow)] ${exportReportType === opt.value ? "border-[var(--vp-yellow)] bg-accent" : "border-border"}`}>
+                    <RadioGroupItem value={opt.value} id={`rt-${opt.value}`} className="sr-only" />
+                    <span className="text-sm">{opt.label}</span>
+                  </Label>
+                ))}
+              </RadioGroup>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Formato</Label>
+              <RadioGroup value={exportFormat} onValueChange={(v) => setExportFormat(v as typeof exportFormat)} className="grid grid-cols-3 gap-2">
+                {[
+                  { value: "PDF" as const, icon: FileText },
+                  { value: "Excel" as const, icon: FileSpreadsheet },
+                  { value: "CSV" as const, icon: FileSpreadsheet },
+                ].map((opt) => (
+                  <Label key={opt.value} htmlFor={`ef-${opt.value}`} className={`flex flex-col items-center gap-1 rounded-lg border-2 p-3 cursor-pointer transition-all hover:border-[var(--vp-yellow)] ${exportFormat === opt.value ? "border-[var(--vp-yellow)] bg-accent" : "border-border"}`}>
+                    <RadioGroupItem value={opt.value} id={`ef-${opt.value}`} className="sr-only" />
+                    <opt.icon className="h-5 w-5 text-muted-foreground" />
+                    <span className="text-xs font-medium">{opt.value}</span>
+                  </Label>
+                ))}
+              </RadioGroup>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Checkbox id="ex-charts" checked={exportIncludeCharts} onCheckedChange={(v) => setExportIncludeCharts(!!v)} />
+                <Label htmlFor="ex-charts" className="text-sm cursor-pointer">Incluir gráficos</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox id="ex-raw" checked={exportIncludeRaw} onCheckedChange={(v) => setExportIncludeRaw(!!v)} />
+                <Label htmlFor="ex-raw" className="text-sm cursor-pointer">Incluir dados brutos</Label>
+              </div>
+            </div>
+            <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
+              📋 Idioma: Português (pt-BR) · Período: {period === "30d" ? "Últimos 30 dias" : period === "3m" ? "Últimos 3 meses" : period === "6m" ? "Últimos 6 meses" : "Últimos 12 meses"}
+            </div>
+            <Button className="w-full gap-2" onClick={handleExportGenerate} disabled={exportLoading}>
+              {exportLoading ? (<><Loader2 className="h-4 w-4 animate-spin" />Gerando...</>) : (<><Download className="h-4 w-4" />Gerar Relatório</>)}
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-4 mt-2">
+            <div className="flex flex-col items-center gap-3 py-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100">
+                <Check className="h-6 w-6 text-emerald-600" />
+              </div>
+              <p className="text-sm font-medium text-foreground">Relatório gerado!</p>
+            </div>
+            <Card>
+              <CardContent className="p-4 space-y-2 text-sm">
+                <div className="flex justify-between"><span className="text-muted-foreground">Tipo</span><span className="font-medium capitalize">{exportReportType}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Formato</span><span className="font-medium">{exportFormat}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Tamanho</span><span className="font-medium">{fmtBytes(exportResult.file_size_bytes)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Expira</span><span className="font-medium">{new Date(exportResult.expires_at).toLocaleDateString("pt-BR")}</span></div>
+              </CardContent>
+            </Card>
+            <div className="flex gap-2">
+              <Button className="flex-1 gap-2" asChild>
+                <a href={exportResult.download_url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4" />Baixar</a>
+              </Button>
+              <Button variant="outline" className="flex-1" onClick={() => setExportResult(null)}>Novo Relatório</Button>
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
     </>
