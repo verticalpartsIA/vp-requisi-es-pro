@@ -17,7 +17,7 @@ import {
   Building2,
   Hourglass,
 } from "lucide-react";
-import { OctagonAlert, Bell, Lightbulb } from "lucide-react";
+import { OctagonAlert, Bell, Lightbulb, FileDown, FileJson, FileSpreadsheet, Loader2, ExternalLink, Check } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +36,27 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+
+/* ── Export types ── */
+
+type ExportFormat = "PDF" | "CSV" | "JSON";
+
+interface ExportResponse {
+  download_url: string;
+  expires_at: string;
+  file_size_bytes: number;
+  generated_at: string;
+}
 
 export const Route = createFileRoute("/logs")({
   head: () => ({
@@ -700,6 +721,43 @@ function LogsPage() {
   const [selectedTicket, setSelectedTicket] = useState<string | null>(null);
   const [activeStatusFilter, setActiveStatusFilter] = useState<"all" | "on_track" | "at_risk" | "breached">("all");
   const detail = selectedTicket ? ticketDetails[selectedTicket] : null;
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [exportTicketId, setExportTicketId] = useState<string | null>(null);
+  const [exportFormat, setExportFormat] = useState<ExportFormat>("PDF");
+  const [exportIncludeMetadata, setExportIncludeMetadata] = useState(true);
+  const [exportLoading, setExportLoading] = useState(false);
+  const [exportResult, setExportResult] = useState<ExportResponse | null>(null);
+
+  const handleOpenExport = (ticketId: string) => {
+    setExportTicketId(ticketId);
+    setExportFormat("PDF");
+    setExportIncludeMetadata(true);
+    setExportResult(null);
+    setExportDialogOpen(true);
+  };
+
+  const handleExport = async () => {
+    if (!exportTicketId) return;
+    setExportLoading(true);
+    // Simulate API call
+    await new Promise((r) => setTimeout(r, 1500));
+    const now = new Date();
+    const expires = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const ext = exportFormat === "PDF" ? "pdf" : exportFormat === "CSV" ? "csv" : "json";
+    setExportResult({
+      download_url: `https://storage.vprequisicoes.com/exports/audit-${exportTicketId}.${ext}`,
+      expires_at: expires.toISOString(),
+      file_size_bytes: Math.floor(Math.random() * 300000) + 50000,
+      generated_at: now.toISOString(),
+    });
+    setExportLoading(false);
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
 
   const filteredActive = activeTickets.filter((t) => {
     if (activeStatusFilter !== "all" && t.sla_status !== activeStatusFilter) return false;
@@ -1067,7 +1125,11 @@ function LogsPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Button variant="outline" size="sm" className="gap-1.5">
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => {
+              // Export all filtered — use first ticket or generic
+              const firstTicket = ticketIds[0] ?? "TODOS";
+              handleOpenExport(firstTicket);
+            }}>
               <Download className="h-4 w-4" />
               <span className="hidden sm:inline">Exportar</span>
             </Button>
@@ -1280,6 +1342,17 @@ function LogsPage() {
               </SheetHeader>
 
               <div className="space-y-5 mt-6">
+                {/* Export Button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full gap-2"
+                  onClick={() => handleOpenExport(detail.ticket_id)}
+                >
+                  <FileDown className="h-4 w-4" />
+                  Exportar Histórico do Ticket
+                </Button>
+
                 {/* Lifecycle Summary */}
                 <div className="space-y-3">
                   <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
@@ -1502,6 +1575,143 @@ function LogsPage() {
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Export Dialog */}
+      <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileDown className="h-5 w-5" />
+              Exportar Auditoria
+            </DialogTitle>
+            <DialogDescription>
+              Ticket: <span className="font-mono font-semibold">{exportTicketId}</span>
+            </DialogDescription>
+          </DialogHeader>
+
+          {!exportResult ? (
+            <div className="space-y-5 mt-2">
+              {/* Format Selection */}
+              <div className="space-y-3">
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Formato
+                </Label>
+                <RadioGroup
+                  value={exportFormat}
+                  onValueChange={(v) => setExportFormat(v as ExportFormat)}
+                  className="grid grid-cols-3 gap-3"
+                >
+                  {[
+                    { value: "PDF" as const, icon: FileText, label: "PDF" },
+                    { value: "CSV" as const, icon: FileSpreadsheet, label: "CSV" },
+                    { value: "JSON" as const, icon: FileJson, label: "JSON" },
+                  ].map((opt) => (
+                    <Label
+                      key={opt.value}
+                      htmlFor={`fmt-${opt.value}`}
+                      className={`flex flex-col items-center gap-2 rounded-lg border-2 p-4 cursor-pointer transition-all hover:border-[var(--vp-yellow)] ${
+                        exportFormat === opt.value
+                          ? "border-[var(--vp-yellow)] bg-accent"
+                          : "border-border"
+                      }`}
+                    >
+                      <RadioGroupItem value={opt.value} id={`fmt-${opt.value}`} className="sr-only" />
+                      <opt.icon className="h-6 w-6 text-muted-foreground" />
+                      <span className="text-sm font-medium">{opt.label}</span>
+                    </Label>
+                  ))}
+                </RadioGroup>
+              </div>
+
+              {/* Options */}
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="include-metadata"
+                  checked={exportIncludeMetadata}
+                  onCheckedChange={(v) => setExportIncludeMetadata(!!v)}
+                />
+                <Label htmlFor="include-metadata" className="text-sm cursor-pointer">
+                  Incluir metadados (transições, responsáveis, motivos)
+                </Label>
+              </div>
+
+              <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
+                <p>🔒 Nenhum dado financeiro será incluído na exportação.</p>
+                <p className="mt-1">📋 Idioma: Português (pt-BR)</p>
+              </div>
+
+              <Button
+                className="w-full gap-2"
+                onClick={handleExport}
+                disabled={exportLoading}
+              >
+                {exportLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Gerando arquivo...
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4" />
+                    Gerar Exportação
+                  </>
+                )}
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4 mt-2">
+              {/* Success State */}
+              <div className="flex flex-col items-center gap-3 py-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100">
+                  <Check className="h-6 w-6 text-emerald-600" />
+                </div>
+                <p className="text-sm font-medium text-foreground">Arquivo gerado com sucesso!</p>
+              </div>
+
+              <Card>
+                <CardContent className="p-4 space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Formato</span>
+                    <span className="font-medium">{exportFormat}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Tamanho</span>
+                    <span className="font-medium">{formatFileSize(exportResult.file_size_bytes)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Gerado em</span>
+                    <span className="font-medium">
+                      {new Date(exportResult.generated_at).toLocaleString("pt-BR")}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Expira em</span>
+                    <span className="font-medium">
+                      {new Date(exportResult.expires_at).toLocaleString("pt-BR")}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <div className="flex gap-2">
+                <Button className="flex-1 gap-2" asChild>
+                  <a href={exportResult.download_url} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink className="h-4 w-4" />
+                    Baixar Arquivo
+                  </a>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setExportResult(null)}
+                >
+                  Nova Exportação
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
