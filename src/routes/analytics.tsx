@@ -23,6 +23,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { Download, FileText, FileSpreadsheet, Image, GitCompareArrows, Filter, ChevronRight } from "lucide-react";
+import { DollarSign, Loader2, Check, ExternalLink, Star, OctagonAlert } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -42,6 +43,9 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   ChartContainer,
   ChartTooltip,
@@ -55,6 +59,8 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  Line,
+  LineChart,
   Pie,
   PieChart,
   RadialBar,
@@ -182,6 +188,50 @@ const topBuyers = [
   { name: "Carlos Souza", tickets: 38, sla: 87 },
 ];
 
+/* ── SLA Trend ── */
+const slaTrendData = [
+  { month: "Dez/25", compliance_rate: 81.7 },
+  { month: "Jan/26", compliance_rate: 83.7 },
+  { month: "Fev/26", compliance_rate: 85.4 },
+  { month: "Mar/26", compliance_rate: 87.0 },
+  { month: "Abr/26", compliance_rate: 87.3 },
+  { month: "Mai/26", compliance_rate: 87.0 },
+];
+const slaTrendConfig: ChartConfig = { compliance_rate: { label: "Compliance %", color: "#F5A623" } };
+
+/* ── Financial ── */
+const financialSummary = { budget_annual: 50_000_000, committed: 42_300_000, spent: 38_100_000, savings: 4_200_000, savings_percentage: 10.0 };
+const categorySpend = [
+  { category: "Matérias-primas", value: 12_400_000, pct: 29, count: 342 },
+  { category: "Equipamentos", value: 8_600_000, pct: 20, count: 128 },
+  { category: "Serviços Técnicos", value: 6_200_000, pct: 15, count: 95 },
+  { category: "Viagens", value: 4_100_000, pct: 10, count: 156 },
+  { category: "Manutenção", value: 3_800_000, pct: 9, count: 88 },
+  { category: "Outros", value: 3_000_000, pct: 7, count: 438 },
+];
+const topSuppliers = [
+  { name: "Casa dos Parafusos Ltda", value: 2_400_000, count: 156, rating: 4.8 },
+  { name: "TecnoServ Equipamentos", value: 1_800_000, count: 89, rating: 4.6 },
+  { name: "LogBrasil Transportes", value: 1_200_000, count: 234, rating: 4.3 },
+  { name: "Metalúrgica São Paulo", value: 980_000, count: 67, rating: 4.7 },
+  { name: "OfficeSupply Brasil", value: 750_000, count: 312, rating: 4.1 },
+];
+const monthlySavings = [
+  { month: "Jan/26", original: 3_200_000, final: 2_800_000, savings: 400_000 },
+  { month: "Fev/26", original: 3_800_000, final: 3_400_000, savings: 380_000 },
+  { month: "Mar/26", original: 4_100_000, final: 3_600_000, savings: 500_000 },
+  { month: "Abr/26", original: 3_900_000, final: 3_500_000, savings: 420_000 },
+  { month: "Mai/26", original: 4_200_000, final: 3_700_000, savings: 500_000 },
+];
+const savingsChartConfig: ChartConfig = { original: { label: "Valor Original", color: "#E5E7EB" }, final: { label: "Valor Final", color: "#3B82F6" }, savings: { label: "Economia", color: "#10B981" } };
+
+/* ── Operational Bottlenecks ── */
+const bottlenecks = [
+  { ticket_id: "M3-000042", stage: "V3_APROVAÇÃO", hours: 288, target: 72, responsible: "Roberto Mendes", role: "Aprovador" },
+  { ticket_id: "M1-000098", stage: "V2_COTAÇÃO", hours: 96, target: 72, responsible: "Ana Oliveira", role: "Cotador" },
+  { ticket_id: "M4-000031", stage: "V2_COTAÇÃO", hours: 68, target: 24, responsible: "Ana Oliveira", role: "Cotador" },
+];
+
 /* ────────────────────────────────────────────────
  *  Helpers
  * ──────────────────────────────────────────────── */
@@ -234,6 +284,29 @@ function AnalyticsPage() {
   const [highlightModule, setHighlightModule] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [drillPath, setDrillPath] = useState<string[]>([]);
+  const [activeTab, setActiveTab] = useState<"executive" | "sla" | "financial" | "operational">("executive");
+  const [exportReportType, setExportReportType] = useState<"executive" | "sla" | "financial" | "operational">("executive");
+  const [exportFormat, setExportFormat] = useState<"PDF" | "Excel" | "CSV">("PDF");
+  const [exportIncludeCharts, setExportIncludeCharts] = useState(true);
+  const [exportIncludeRaw, setExportIncludeRaw] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
+  const [exportResult, setExportResult] = useState<{ download_url: string; expires_at: string; file_size_bytes: number; generated_at: string } | null>(null);
+
+  const handleExportGenerate = async () => {
+    setExportLoading(true);
+    await new Promise((r) => setTimeout(r, 1500));
+    const now = new Date();
+    setExportResult({
+      download_url: `https://storage.vprequisicoes.com/exports/analytics-${exportReportType}-${now.getTime()}.${exportFormat.toLowerCase()}`,
+      expires_at: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      file_size_bytes: Math.floor(Math.random() * 2_000_000) + 500_000,
+      generated_at: now.toISOString(),
+    });
+    setExportLoading(false);
+  };
+
+  const fmtBRL = (v: number) => v >= 1_000_000 ? `R$ ${(v / 1_000_000).toFixed(1)}M` : `R$ ${(v / 1_000).toFixed(0)}K`;
+  const fmtBytes = (b: number) => b < 1024 * 1024 ? `${(b / 1024).toFixed(1)} KB` : `${(b / (1024 * 1024)).toFixed(1)} MB`;
 
   const totalTickets = 1714;
   const avgCycleHours = 156;
@@ -598,7 +671,8 @@ function AnalyticsPage() {
         </Card>
       </div>
 
-      {/* Quality + Efficiency + Top Buyers */}
+      {/* Quality + Efficiency + Top Buyers (Executive) */}
+      {activeTab === "executive" && (
       <div className="grid lg:grid-cols-3 gap-4">
         {/* Quality */}
         <Card className="card-hover-yellow">
@@ -691,6 +765,269 @@ function AnalyticsPage() {
           </CardContent>
         </Card>
       </div>
+      )}
+
+      {/* ═══ SLA TAB ═══ */}
+      {activeTab === "sla" && (
+        <div className="space-y-4">
+          <Card className="card-hover-yellow">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold">Tendência SLA</CardTitle>
+              <p className="text-xs text-muted-foreground">Compliance % últimos 6 meses</p>
+            </CardHeader>
+            <CardContent>
+              <ChartContainer config={slaTrendConfig} className="h-[250px] w-full">
+                <LineChart data={slaTrendData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                  <XAxis dataKey="month" tick={{ fontSize: 10 }} className="fill-muted-foreground" />
+                  <YAxis domain={[75, 100]} tick={{ fontSize: 10 }} className="fill-muted-foreground" />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Line type="monotone" dataKey="compliance_rate" stroke="#F5A623" strokeWidth={3} dot={{ r: 5, fill: "#F5A623" }} />
+                </LineChart>
+              </ChartContainer>
+            </CardContent>
+          </Card>
+          <div className="grid lg:grid-cols-2 gap-4">
+            <Card className="card-hover-yellow">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold">Duração por Estágio (detalhada)</CardTitle>
+                <p className="text-xs text-muted-foreground">Média · Mediana · P95 vs Meta</p>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {[
+                  { stage: "V2 Cotação", avg: 42, median: 36, p95: 68, target: 72 },
+                  { stage: "V3 Aprovação", avg: 52, median: 48, p95: 96, target: 72 },
+                  { stage: "V4 Compra", avg: 36, median: 30, p95: 62, target: 48 },
+                  { stage: "V5 Recebimento", avg: 120, median: 96, p95: 192, target: 168 },
+                ].map((s) => (
+                  <div key={s.stage} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-medium text-foreground">{s.stage}</span>
+                      <span className={s.p95 > s.target ? "text-red-500 font-semibold" : "text-emerald-600 font-semibold"}>
+                        P95: {s.p95}h {s.p95 > s.target ? "⚠" : "✓"}
+                      </span>
+                    </div>
+                    <div className="flex gap-4 text-[10px] text-muted-foreground">
+                      <span>Média: {s.avg}h</span><span>Mediana: {s.median}h</span><span>Meta: {s.target}h</span>
+                    </div>
+                    <Progress value={Math.min((s.avg / s.target) * 100, 100)} className="h-1.5" />
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+            <Card className="card-hover-yellow">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <OctagonAlert className="h-4 w-4 text-red-500" />
+                  Gargalos Ativos
+                </CardTitle>
+                <p className="text-xs text-muted-foreground">{bottlenecks.length} tickets acima da meta</p>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {bottlenecks.map((b) => (
+                  <div key={b.ticket_id} className="rounded-lg border p-3 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-mono font-bold text-foreground">{b.ticket_id}</span>
+                      <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200">
+                        {b.hours}h / {b.target}h meta
+                      </Badge>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">{b.stage.replace(/_/g, " ")} · {b.responsible} ({b.role})</p>
+                    <Progress value={Math.min((b.hours / b.target) * 100, 100)} className="h-1 [&>div]:bg-red-500" />
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ FINANCIAL TAB ═══ */}
+      {activeTab === "financial" && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+            {[
+              { label: "Orçamento Anual", value: financialSummary.budget_annual },
+              { label: "Comprometido", value: financialSummary.committed },
+              { label: "Realizado", value: financialSummary.spent },
+              { label: "Economia", value: financialSummary.savings },
+            ].map((item) => (
+              <Card key={item.label} className="card-hover-yellow">
+                <CardContent className="p-4">
+                  <p className="text-[10px] text-muted-foreground font-medium">{item.label}</p>
+                  <p className="text-lg font-bold text-foreground mt-1">{fmtBRL(item.value)}</p>
+                </CardContent>
+              </Card>
+            ))}
+            <Card className="card-hover-yellow">
+              <CardContent className="p-4">
+                <p className="text-[10px] text-muted-foreground font-medium">% Economia</p>
+                <p className="text-lg font-bold text-emerald-600 mt-1">{financialSummary.savings_percentage}%</p>
+              </CardContent>
+            </Card>
+          </div>
+          <Card className="card-hover-yellow">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold">Utilização do Orçamento</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Comprometido</span>
+                <span className="font-semibold text-foreground">{((financialSummary.committed / financialSummary.budget_annual) * 100).toFixed(1)}%</span>
+              </div>
+              <Progress value={(financialSummary.committed / financialSummary.budget_annual) * 100} className="h-3 [&>div]:bg-amber-500" />
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Realizado</span>
+                <span className="font-semibold text-foreground">{((financialSummary.spent / financialSummary.budget_annual) * 100).toFixed(1)}%</span>
+              </div>
+              <Progress value={(financialSummary.spent / financialSummary.budget_annual) * 100} className="h-3" />
+            </CardContent>
+          </Card>
+          <div className="grid lg:grid-cols-2 gap-4">
+            <Card className="card-hover-yellow">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold">Economia Mensal</CardTitle>
+                <p className="text-xs text-muted-foreground">Valor original vs final</p>
+              </CardHeader>
+              <CardContent>
+                <ChartContainer config={savingsChartConfig} className="h-[220px] w-full">
+                  <BarChart data={monthlySavings} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                    <XAxis dataKey="month" tick={{ fontSize: 10 }} className="fill-muted-foreground" />
+                    <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => `${(v / 1_000_000).toFixed(1)}M`} className="fill-muted-foreground" />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Bar dataKey="original" fill="#E5E7EB" radius={[4, 4, 0, 0]} barSize={20} />
+                    <Bar dataKey="final" fill="#3B82F6" radius={[4, 4, 0, 0]} barSize={20} />
+                  </BarChart>
+                </ChartContainer>
+              </CardContent>
+            </Card>
+            <Card className="card-hover-yellow">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold">Gasto por Categoria</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {categorySpend.map((c) => (
+                  <div key={c.category} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">{c.category}</span>
+                      <span className="font-medium text-foreground">{fmtBRL(c.value)} ({c.pct}%)</span>
+                    </div>
+                    <Progress value={c.pct} className="h-1.5" />
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+          <Card className="card-hover-yellow">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold">Top Fornecedores</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {topSuppliers.map((s, i) => (
+                <div key={s.name} className="flex items-center gap-3">
+                  <span className="text-xs font-bold text-muted-foreground w-4">{i + 1}.</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-foreground truncate">{s.name}</p>
+                    <p className="text-[10px] text-muted-foreground">{s.count} pedidos · {fmtBRL(s.value)}</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Star className="h-3 w-3 text-amber-400 fill-amber-400" />
+                    <span className="text-xs font-medium text-foreground">{s.rating}</span>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* ═══ OPERATIONAL TAB ═══ */}
+      {activeTab === "operational" && (
+        <div className="space-y-4">
+          <Card className="card-hover-yellow">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold">Produtividade por Comprador</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b text-muted-foreground">
+                      <th className="text-left py-2 font-medium">Comprador</th>
+                      <th className="text-right py-2 font-medium">Requisições</th>
+                      <th className="text-right py-2 font-medium">Valor</th>
+                      <th className="text-right py-2 font-medium">Tempo Médio</th>
+                      <th className="text-right py-2 font-medium">SLA %</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      { name: "Maria Oliveira", requests: 234, value: 1_200_000, avgDays: 4.2, sla: 92 },
+                      { name: "Ana Costa", requests: 198, value: 980_000, avgDays: 5.1, sla: 88 },
+                      { name: "João Pereira", requests: 176, value: 850_000, avgDays: 4.8, sla: 91 },
+                      { name: "Fernanda Lima", requests: 152, value: 720_000, avgDays: 3.9, sla: 95 },
+                      { name: "Carlos Souza", requests: 134, value: 650_000, avgDays: 6.2, sla: 84 },
+                    ].map((b) => (
+                      <tr key={b.name} className="border-b border-border/50 hover:bg-accent/50">
+                        <td className="py-2 font-medium text-foreground">{b.name}</td>
+                        <td className="py-2 text-right text-foreground">{b.requests}</td>
+                        <td className="py-2 text-right text-foreground">{fmtBRL(b.value)}</td>
+                        <td className="py-2 text-right text-foreground">{b.avgDays}d</td>
+                        <td className="py-2 text-right">
+                          <Badge variant="outline" className={`text-[10px] ${b.sla >= 90 ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
+                            {b.sla}%
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+          <div className="grid lg:grid-cols-2 gap-4">
+            <Card className="card-hover-yellow">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold">Métricas por Estágio</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ChartContainer config={stageBarConfig} className="h-[250px] w-full">
+                  <BarChart data={stageDurationData} layout="vertical" margin={{ top: 5, right: 10, left: 10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" horizontal={false} />
+                    <XAxis type="number" tick={{ fontSize: 10 }} className="fill-muted-foreground" />
+                    <YAxis dataKey="label" type="category" tick={{ fontSize: 10 }} width={80} className="fill-muted-foreground" />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Bar dataKey="target" fill="#E5E7EB" radius={[0, 4, 4, 0]} barSize={14} />
+                    <Bar dataKey="avg" fill="#3B82F6" radius={[0, 4, 4, 0]} barSize={14} />
+                  </BarChart>
+                </ChartContainer>
+              </CardContent>
+            </Card>
+            <Card className="card-hover-yellow">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <OctagonAlert className="h-4 w-4 text-red-500" />
+                  Gargalos Operacionais
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {bottlenecks.map((b) => (
+                  <div key={b.ticket_id} className="rounded-lg border p-3 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-mono font-bold text-foreground">{b.ticket_id}</span>
+                      <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200">
+                        {Math.round(b.hours / b.target * 100)}% da meta
+                      </Badge>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">{b.stage.replace(/_/g, " ")} · {b.responsible} ({b.role}) · {b.hours}h</p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
     </div>
 
     {/* Export Dialog */}
