@@ -84,24 +84,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let mounted = true;
 
     const bootstrap = async () => {
-      const [{ data: sessionData }, { data: userData }] = await Promise.all([
-        supabaseBrowser.auth.getSession(),
-        supabaseBrowser.auth.getUser(),
-      ]);
+      try {
+        const timeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("auth_timeout")), 8000),
+        );
 
-      if (!mounted) return;
+        const [{ data: sessionData }, { data: userData }] = await Promise.race([
+          Promise.all([
+            supabaseBrowser.auth.getSession(),
+            supabaseBrowser.auth.getUser(),
+          ]),
+          timeout,
+        ]);
 
-      setSession(sessionData.session);
-      setUser(userData.user);
-
-      if (userData.user) {
-        const result = await loadProfileAndRoles(userData.user.id);
         if (!mounted) return;
-        setProfile(result.profile);
-        setRoles(result.roles);
-      }
 
-      if (mounted) setIsLoading(false);
+        setSession(sessionData.session);
+        setUser(userData.user);
+
+        if (userData.user) {
+          const result = await loadProfileAndRoles(userData.user.id);
+          if (!mounted) return;
+          setProfile(result.profile);
+          setRoles(result.roles);
+        }
+      } catch {
+        // timeout ou erro de rede — continua sem sessão (vai para /login)
+      } finally {
+        if (mounted) setIsLoading(false);
+      }
     };
 
     void bootstrap();
