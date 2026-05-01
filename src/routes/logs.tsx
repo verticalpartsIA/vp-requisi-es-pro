@@ -78,6 +78,23 @@ interface AuditLogEntry {
   is_sla_breach: boolean;
 }
 
+/* ── Active Ticket (list API response) ── */
+
+interface ActiveTicket {
+  ticket_id: string;
+  current_stage: string;
+  created_at: string;
+  hours_elapsed: number;
+  sla_target_hours: number;
+  sla_percentage_used: number;
+  sla_status: "on_track" | "at_risk" | "breached";
+  stage_hours_elapsed: number;
+  stage_target_hours: number;
+  is_stage_bottleneck: boolean;
+  responsible: string;
+  responsible_role: string;
+}
+
 type SlaStatus = "ok" | "warning" | "breach";
 
 /* ── Ticket Detail types (API response schema) ── */
@@ -532,6 +549,79 @@ const auditEntries: AuditLogEntry[] = [
   },
 ];
 
+const activeTickets: ActiveTicket[] = [
+  {
+    ticket_id: "M1-000072",
+    current_stage: "V3",
+    created_at: "20/04/2026",
+    hours_elapsed: 264,
+    sla_target_hours: 720,
+    sla_percentage_used: 36.7,
+    sla_status: "at_risk",
+    stage_hours_elapsed: 96,
+    stage_target_hours: 72,
+    is_stage_bottleneck: true,
+    responsible: "Roberto Mendes",
+    responsible_role: "Aprovador",
+  },
+  {
+    ticket_id: "M4-000031",
+    current_stage: "V2",
+    created_at: "25/04/2026",
+    hours_elapsed: 68,
+    sla_target_hours: 336,
+    sla_percentage_used: 20.2,
+    sla_status: "breached",
+    stage_hours_elapsed: 68,
+    stage_target_hours: 24,
+    is_stage_bottleneck: true,
+    responsible: "Ana Oliveira",
+    responsible_role: "Cotador",
+  },
+  {
+    ticket_id: "M1-000065",
+    current_stage: "V3",
+    created_at: "28/04/2026",
+    hours_elapsed: 42,
+    sla_target_hours: 720,
+    sla_percentage_used: 5.8,
+    sla_status: "on_track",
+    stage_hours_elapsed: 42,
+    stage_target_hours: 48,
+    is_stage_bottleneck: false,
+    responsible: "Diretor Marcos",
+    responsible_role: "Aprovador",
+  },
+  {
+    ticket_id: "M3-000018",
+    current_stage: "V2",
+    created_at: "28/04/2026",
+    hours_elapsed: 30,
+    sla_target_hours: 720,
+    sla_percentage_used: 4.2,
+    sla_status: "on_track",
+    stage_hours_elapsed: 30,
+    stage_target_hours: 48,
+    is_stage_bottleneck: false,
+    responsible: "Ana Oliveira",
+    responsible_role: "Cotador",
+  },
+  {
+    ticket_id: "M2-000042",
+    current_stage: "V4",
+    created_at: "27/04/2026",
+    hours_elapsed: 12,
+    sla_target_hours: 336,
+    sla_percentage_used: 3.6,
+    sla_status: "on_track",
+    stage_hours_elapsed: 3,
+    stage_target_hours: 24,
+    is_stage_bottleneck: false,
+    responsible: "Paulo Ferreira",
+    responsible_role: "Comprador",
+  },
+];
+
 const moduleOptions = ["Todos", "M1", "M2", "M3", "M4", "M5", "M6"];
 const stageOptions = ["Todos", "V1", "V2", "V3", "V4", "V5"];
 const slaOptions = ["Todos", "ok", "warning", "breach"];
@@ -608,7 +698,14 @@ function LogsPage() {
   const [slaFilter, setSlaFilter] = useState("Todos");
   const [expandedTicket, setExpandedTicket] = useState<string | null>(null);
   const [selectedTicket, setSelectedTicket] = useState<string | null>(null);
+  const [activeStatusFilter, setActiveStatusFilter] = useState<"all" | "on_track" | "at_risk" | "breached">("all");
   const detail = selectedTicket ? ticketDetails[selectedTicket] : null;
+
+  const filteredActive = activeTickets.filter((t) => {
+    if (activeStatusFilter !== "all" && t.sla_status !== activeStatusFilter) return false;
+    if (moduleFilter !== "Todos" && !t.ticket_id.startsWith(moduleFilter)) return false;
+    return true;
+  });
 
   const filtered = auditEntries.filter((e) => {
     if (moduleFilter !== "Todos" && e.module !== moduleFilter) return false;
@@ -771,6 +868,148 @@ function LogsPage() {
       )}
 
       {/* Filters */}
+
+      {/* Active Tickets Table */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+            <Hourglass className="h-4 w-4 text-vp-yellow-dark" />
+            Tickets Ativos
+            <Badge variant="outline" className="text-[10px]">
+              {filteredActive.length}
+            </Badge>
+          </h2>
+          <div className="flex gap-1">
+            {(
+              [
+                { key: "all", label: "Todos" },
+                { key: "on_track", label: "No prazo" },
+                { key: "at_risk", label: "Em risco" },
+                { key: "breached", label: "Excedido" },
+              ] as const
+            ).map((opt) => (
+              <Button
+                key={opt.key}
+                variant={activeStatusFilter === opt.key ? "default" : "outline"}
+                size="sm"
+                className="text-[10px] h-7 px-2"
+                onClick={() => setActiveStatusFilter(opt.key)}
+              >
+                {opt.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        {filteredActive.length > 0 ? (
+          <Card>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left p-3 text-[10px] font-medium text-muted-foreground uppercase">Ticket</th>
+                      <th className="text-left p-3 text-[10px] font-medium text-muted-foreground uppercase">Etapa</th>
+                      <th className="text-left p-3 text-[10px] font-medium text-muted-foreground uppercase">SLA Total</th>
+                      <th className="text-left p-3 text-[10px] font-medium text-muted-foreground uppercase">Etapa Atual</th>
+                      <th className="text-left p-3 text-[10px] font-medium text-muted-foreground uppercase">Responsável</th>
+                      <th className="text-left p-3 text-[10px] font-medium text-muted-foreground uppercase">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredActive.map((t) => (
+                      <tr
+                        key={t.ticket_id}
+                        className="border-b border-border last:border-0 hover:bg-accent/50 transition-colors cursor-pointer"
+                        onClick={() => setSelectedTicket(t.ticket_id)}
+                      >
+                        <td className="p-3">
+                          <span className="font-mono text-xs font-semibold text-foreground">{t.ticket_id}</span>
+                          <p className="text-[10px] text-muted-foreground">{t.created_at}</p>
+                        </td>
+                        <td className="p-3">
+                          <Badge variant="outline" className="text-[10px]">{t.current_stage}</Badge>
+                        </td>
+                        <td className="p-3">
+                          <div className="space-y-1 min-w-[120px]">
+                            <div className="flex justify-between text-[10px] text-muted-foreground">
+                              <span>{formatSla(t.hours_elapsed)}</span>
+                              <span>{t.sla_percentage_used.toFixed(0)}%</span>
+                            </div>
+                            <div className="w-full bg-muted rounded-full h-1.5">
+                              <div
+                                className={`h-1.5 rounded-full ${
+                                  t.sla_status === "breached"
+                                    ? "bg-red-500"
+                                    : t.sla_status === "at_risk"
+                                      ? "bg-amber-500"
+                                      : "bg-emerald-500"
+                                }`}
+                                style={{ width: `${Math.min(t.sla_percentage_used, 100)}%` }}
+                              />
+                            </div>
+                            <p className="text-[10px] text-muted-foreground">Meta: {formatSla(t.sla_target_hours)}</p>
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <div className="space-y-1 min-w-[100px]">
+                            <div className="flex justify-between text-[10px] text-muted-foreground">
+                              <span>{formatSla(t.stage_hours_elapsed)}</span>
+                              <span>{formatSla(t.stage_target_hours)}</span>
+                            </div>
+                            <div className="w-full bg-muted rounded-full h-1.5">
+                              <div
+                                className={`h-1.5 rounded-full ${
+                                  t.is_stage_bottleneck ? "bg-red-500" : "bg-emerald-500"
+                                }`}
+                                style={{
+                                  width: `${Math.min((t.stage_hours_elapsed / t.stage_target_hours) * 100, 100)}%`,
+                                }}
+                              />
+                            </div>
+                            {t.is_stage_bottleneck && (
+                              <span className="text-[10px] text-red-500 font-semibold">● Gargalo</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <p className="text-xs text-foreground">{t.responsible}</p>
+                          <p className="text-[10px] text-muted-foreground">{t.responsible_role}</p>
+                        </td>
+                        <td className="p-3">
+                          <span
+                            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                              t.sla_status === "breached"
+                                ? "bg-red-100 text-red-700 border-red-200"
+                                : t.sla_status === "at_risk"
+                                  ? "bg-amber-100 text-amber-700 border-amber-200"
+                                  : "bg-emerald-100 text-emerald-700 border-emerald-200"
+                            }`}
+                          >
+                            {t.sla_status === "breached"
+                              ? "Excedido"
+                              : t.sla_status === "at_risk"
+                                ? "Em risco"
+                                : "No prazo"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardContent className="p-8 text-center">
+              <p className="text-sm text-muted-foreground">Nenhum ticket ativo com esse filtro.</p>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* Filters & Timeline */}
       <Card>
         <CardContent className="p-4">
           <div className="flex flex-col sm:flex-row gap-3">
