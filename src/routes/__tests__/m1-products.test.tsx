@@ -12,14 +12,16 @@ import {
 } from "@tanstack/react-router";
 
 // We need to mock sonner toast to capture toast calls
-const toastMock = {
-  success: vi.fn(),
-  error: vi.fn(),
-};
 vi.mock("sonner", () => ({
-  toast: toastMock,
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
   Toaster: () => null,
 }));
+
+// Import after mock setup
+import { toast } from "sonner";
 
 // Import the route module to get the component
 import { Route as ProductsRoute } from "../../routes/products";
@@ -48,7 +50,8 @@ describe("M1 - Product Requisitions", () => {
   const user = userEvent.setup();
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.mocked(toast.success).mockClear();
+    vi.mocked(toast.error).mockClear();
   });
 
   describe("Page Rendering", () => {
@@ -147,7 +150,7 @@ describe("M1 - Product Requisitions", () => {
       // Try to advance
       await user.click(screen.getByText("Próximo"));
 
-      expect(toastMock.error).toHaveBeenCalledWith(
+      expect(toast.error).toHaveBeenCalledWith(
         "Nome do produto deve ter pelo menos 5 caracteres."
       );
     });
@@ -173,7 +176,7 @@ describe("M1 - Product Requisitions", () => {
 
       await user.click(screen.getByText("Próximo"));
 
-      expect(toastMock.error).toHaveBeenCalledWith(
+      expect(toast.error).toHaveBeenCalledWith(
         "Descrição deve ter pelo menos 20 caracteres."
       );
     });
@@ -197,7 +200,7 @@ describe("M1 - Product Requisitions", () => {
       // Leave quantity empty (0)
       await user.click(screen.getByText("Próximo"));
 
-      expect(toastMock.error).toHaveBeenCalledWith(
+      expect(toast.error).toHaveBeenCalledWith(
         "Quantidade deve ser maior que 0."
       );
     });
@@ -378,7 +381,7 @@ describe("M1 - Product Requisitions", () => {
       await user.click(screen.getByText("Enviar Requisição"));
 
       // Should show one of the validation errors
-      expect(toastMock.error).toHaveBeenCalled();
+      expect(toast.error).toHaveBeenCalled();
     });
 
     it("should show urgency level options: Baixa, Média, Alta, Urgente", async () => {
@@ -423,7 +426,7 @@ describe("M1 - Product Requisitions", () => {
       await user.click(screen.getByText("Enviar Requisição"));
 
       // Should fail on date validation first
-      expect(toastMock.error).toHaveBeenCalledWith(
+      expect(toast.error).toHaveBeenCalledWith(
         "Informe a data limite para entrega."
       );
     });
@@ -481,7 +484,7 @@ describe("M1 - Product Requisitions", () => {
 
       // Should show date validation error
       await waitFor(() => {
-        expect(toastMock.error).toHaveBeenCalledWith(
+        expect(toast.error).toHaveBeenCalledWith(
           "Informe a data limite para entrega."
         );
       });
