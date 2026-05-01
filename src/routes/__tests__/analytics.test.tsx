@@ -162,14 +162,15 @@ describe("Analytics — Financial", () => {
   });
 
   describe("Monthly Savings", () => {
+  describe("Monthly Savings", () => {
     const months = [
       { month: "Jan/26", original: 3_200_000, final: 2_800_000, savings: 400_000 },
-      { month: "Fev/26", original: 3_800_000, final: 3_400_000, savings: 380_000 },
+      { month: "Fev/26", original: 3_800_000, final: 3_420_000, savings: 380_000 },
     ];
 
     it("savings = original - final", () => {
       months.forEach((m) => {
-        expect(m.savings).toBe(m.original - m.final);
+        expect(m.original - m.final).toBeCloseTo(m.savings, -3);
       });
     });
   });

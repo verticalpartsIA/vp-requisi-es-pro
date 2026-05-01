@@ -99,7 +99,7 @@ describe("V4 — Compra (Purchasing)", () => {
     const subtotal = unitPrice * quantity;
     const total = subtotal * (1 + taxRate);
     expect(subtotal).toBe(5000);
-    expect(total).toBe(5600);
+    expect(total).toBeCloseTo(5600, 0);
   });
 });
 

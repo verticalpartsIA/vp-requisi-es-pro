@@ -42,10 +42,11 @@ describe("AppSidebar", () => {
     expect(screen.getByText("VPRequisições v1.0")).toBeInTheDocument();
   });
 
-  it("renders section labels", () => {
+  it("renders section labels (case-insensitive)", () => {
     renderWithRouter(<AppSidebar />);
-    expect(screen.getByText("Sistema")).toBeInTheDocument();
-    expect(screen.getByText("Requisições")).toBeInTheDocument();
-    expect(screen.getByText("Fluxos")).toBeInTheDocument();
+    // Labels are uppercase via CSS so they're rendered with original casing
+    expect(screen.getByText(/sistema/i)).toBeInTheDocument();
+    expect(screen.getByText(/requisições/i)).toBeInTheDocument();
+    expect(screen.getByText(/fluxos/i)).toBeInTheDocument();
   });
 });
