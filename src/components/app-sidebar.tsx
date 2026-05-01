@@ -61,7 +61,7 @@ export function AppSidebar() {
 
   const renderGroup = (label: string, items: typeof modules) => (
     <SidebarGroup>
-      <SidebarGroupLabel className="text-sidebar-primary/70 uppercase text-[10px] tracking-widest font-semibold">
+      <SidebarGroupLabel className="text-sidebar-foreground/40 uppercase text-[10px] tracking-widest font-semibold">
         {label}
       </SidebarGroupLabel>
       <SidebarGroupContent>
@@ -71,7 +71,7 @@ export function AppSidebar() {
               <SidebarMenuButton
                 asChild
                 isActive={isActive(item.url)}
-                className="transition-colors duration-200"
+                className="text-sidebar-foreground/80 transition-all duration-300 hover:!text-vp-yellow hover:!bg-sidebar-accent data-[active=true]:!text-vp-yellow data-[active=true]:!bg-sidebar-accent"
               >
                 <Link to={item.url} className="flex items-center gap-3">
                   <item.icon className="h-4 w-4" />
