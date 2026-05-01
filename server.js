@@ -213,8 +213,11 @@ const server = createServer(async (req, res) => {
     await sendWebResponse(res, response);
   } catch (error) {
     console.error("Erro ao processar requisicao", error);
+    const errDetail = error instanceof Error
+      ? (error.stack || error.message)
+      : String(error);
     res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
-    res.end("Erro interno do servidor.");
+    res.end("[DEBUG] Erro:\n" + errDetail);
   }
 });
 
