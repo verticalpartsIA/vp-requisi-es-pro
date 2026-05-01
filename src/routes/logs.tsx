@@ -17,6 +17,11 @@ import {
   Building2,
   Hourglass,
 } from "lucide-react";
+import {
+  OctagonAlert,
+  Bell,
+  Lightbulb,
+} from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -75,6 +80,20 @@ type SlaStatus = "ok" | "warning" | "breach";
 /* ────────────────────────────────────────────────
  *  Mock data — NO financial data (§2.3)
  * ──────────────────────────────────────────────── */
+
+interface BottleneckAnalysis {
+  ticket_id: string;
+  current_stage: string;
+  stuck_since: string;
+  hours_in_current_stage: number;
+  target_hours_for_stage: number;
+  is_bottleneck: boolean;
+  responsible_user: string;
+  responsible_role: string;
+  blocking_reason?: string;
+  recommendation: string;
+  escalation_required: boolean;
+}
 
 interface SLATarget {
   module: string;
@@ -157,6 +176,47 @@ function getStageTarget(module: string, stage: string): number {
 }
 
 /* Global averages for the metrics cards (mock) */
+const bottlenecks: BottleneckAnalysis[] = [
+  {
+    ticket_id: "M3-000018",
+    current_stage: "V3",
+    stuck_since: "28/04/2026 10:00",
+    hours_in_current_stage: 96,
+    target_hours_for_stage: 72,
+    is_bottleneck: true,
+    responsible_user: "Roberto Mendes",
+    responsible_role: "Aprovador Nível 1",
+    blocking_reason: "Aguardando aprovação gerencial",
+    recommendation: "Enviar lembrete ao aprovador ou escalar para gestor",
+    escalation_required: true,
+  },
+  {
+    ticket_id: "M4-000031",
+    current_stage: "V2",
+    stuck_since: "27/04/2026 10:00",
+    hours_in_current_stage: 68,
+    target_hours_for_stage: 24,
+    is_bottleneck: true,
+    responsible_user: "Ana Oliveira",
+    responsible_role: "Cotador",
+    blocking_reason: "Aguardando diagnóstico técnico",
+    recommendation: "Solicitar laudo técnico urgente ao requisitante",
+    escalation_required: true,
+  },
+  {
+    ticket_id: "M1-000065",
+    current_stage: "V3",
+    stuck_since: "29/04/2026 08:00",
+    hours_in_current_stage: 42,
+    target_hours_for_stage: 48,
+    is_bottleneck: false,
+    responsible_user: "Diretor Marcos",
+    responsible_role: "Aprovador Nível 2",
+    recommendation: "Dentro do prazo — monitorar",
+    escalation_required: false,
+  },
+];
+
 const slaMetrics: {
   label: string;
   avgHours: number;
@@ -462,6 +522,96 @@ function LogsPage() {
           </Card>
         ))}
       </div>
+
+      {/* Filters */}
+      {/* Bottleneck Analysis */}
+      {bottlenecks.filter((b) => b.is_bottleneck).length > 0 && (
+        <Card className="border-red-200 bg-red-50/30">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <OctagonAlert className="h-4 w-4 text-red-500" />
+              <h2 className="text-sm font-semibold text-foreground">
+                Gargalos Detectados
+              </h2>
+              <Badge variant="outline" className="text-[10px] border-red-200 text-red-600">
+                {bottlenecks.filter((b) => b.is_bottleneck).length} ticket{bottlenecks.filter((b) => b.is_bottleneck).length > 1 ? "s" : ""}
+              </Badge>
+            </div>
+            <div className="space-y-3">
+              {bottlenecks
+                .filter((b) => b.is_bottleneck)
+                .map((b) => {
+                  const overPercent = Math.round(
+                    ((b.hours_in_current_stage - b.target_hours_for_stage) /
+                      b.target_hours_for_stage) *
+                      100,
+                  );
+                  return (
+                    <div
+                      key={b.ticket_id}
+                      className="rounded-lg border border-red-200 bg-white p-3 space-y-2"
+                    >
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-sm font-semibold text-foreground">
+                            {b.ticket_id}
+                          </span>
+                          <Badge variant="outline" className="text-[10px]">
+                            {b.current_stage}
+                          </Badge>
+                          <span className="text-[10px] text-red-600 font-semibold">
+                            +{overPercent}% acima da meta
+                          </span>
+                        </div>
+                        {b.escalation_required && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-red-100 border border-red-300 px-2 py-0.5 text-[10px] font-semibold text-red-700">
+                            <Bell className="h-3 w-3" />
+                            Escalonamento necessário
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="w-full bg-muted rounded-full h-1.5">
+                        <div
+                          className="bg-red-500 h-1.5 rounded-full"
+                          style={{
+                            width: `${Math.min((b.hours_in_current_stage / b.target_hours_for_stage) * 100, 100)}%`,
+                          }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-[10px] text-muted-foreground">
+                        <span>{formatSla(b.hours_in_current_stage)} na etapa</span>
+                        <span>Meta: {formatSla(b.target_hours_for_stage)}</span>
+                      </div>
+
+                      <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                        <span className="flex items-center gap-1">
+                          <User className="h-3 w-3" />
+                          {b.responsible_user} ({b.responsible_role})
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          Desde {b.stuck_since}
+                        </span>
+                      </div>
+
+                      {b.blocking_reason && (
+                        <p className="text-[11px] bg-red-50 text-red-600 px-2 py-1 rounded">
+                          {b.blocking_reason}
+                        </p>
+                      )}
+
+                      <div className="flex items-start gap-1.5 text-[11px] text-amber-700 bg-amber-50 px-2 py-1 rounded">
+                        <Lightbulb className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                        <span>{b.recommendation}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Filters */}
       <Card>
