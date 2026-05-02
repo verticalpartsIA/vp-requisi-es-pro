@@ -37,6 +37,12 @@ import { confirmPurchaseClient, listPendingPurchasesClient } from "@/features/pu
 import { useAuth } from "@/features/auth/auth-context";
 
 export const Route = createFileRoute("/purchasing")({
+  head: () => ({
+    meta: [
+      { title: "V4 Compra — VPRequisições" },
+      { name: "description", content: "Emissão de ordens de compra e gestão de pedidos" },
+    ],
+  }),
   component: PurchasingPage,
 });
 

@@ -38,6 +38,12 @@ type WinCriteria = "price" | "deadline" | "price_deadline";
 type Phase = "suppliers" | "proposals" | "winner";
 
 export const Route = createFileRoute("/quoting")({
+  head: () => ({
+    meta: [
+      { title: "V2 Cotação — VPRequisições" },
+      { name: "description", content: "Gerenciamento de cotações e propostas de fornecedores" },
+    ],
+  }),
   component: QuotingPage,
 });
 

@@ -14,6 +14,12 @@ import { listPendingReceiptsClient, registerReceiptClient } from "@/features/rec
 import { useAuth } from "@/features/auth/auth-context";
 
 export const Route = createFileRoute("/receipt")({
+  head: () => ({
+    meta: [
+      { title: "V5 Recebimento — VPRequisições" },
+      { name: "description", content: "Registro de recebimento e conferência de materiais e serviços" },
+    ],
+  }),
   component: ReceiptPage,
 });
 

@@ -25,6 +25,12 @@ import { useAuth } from "@/features/auth/auth-context";
 import { APPROVAL_LEVEL_LABELS, APPROVAL_LEVEL_SHORT_LABELS } from "@/lib/approval";
 
 export const Route = createFileRoute("/approval")({
+  head: () => ({
+    meta: [
+      { title: "V3 Aprovação — VPRequisições" },
+      { name: "description", content: "Aprovação de requisições por alçada e tier" },
+    ],
+  }),
   component: ApprovalPage,
 });
 

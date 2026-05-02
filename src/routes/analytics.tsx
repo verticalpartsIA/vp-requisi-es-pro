@@ -387,14 +387,69 @@ function AnalyticsPage() {
     return () => clearInterval(interval);
   }, [wsConnected]);
 
+  const buildCsvContent = (): string => {
+    const sep = exportFormat === "CSV" ? "," : "\t";
+    const q = (v: string | number) => {
+      const s = String(v);
+      return exportFormat === "CSV" ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+
+    if (exportReportType === "executive") {
+      const header = [q("Mês"), q("M1 Produtos"), q("M2 Viagens"), q("M3 Serviços"), q("M4 Manutenção"), q("M5 Frete"), q("M6 Locação")].join(sep);
+      const rows = volumeTrendData.map((r) =>
+        [q(r.month), r.M1, r.M2, r.M3, r.M4, r.M5, r.M6].join(sep)
+      );
+      return [header, ...rows].join("\r\n");
+    }
+    if (exportReportType === "sla") {
+      const header = [q("Módulo"), q("Label"), q("Compliance %")].join(sep);
+      const rows = slaByModuleData.map((r) =>
+        [q(r.module), q(r.label), r.compliance].join(sep)
+      );
+      return [header, ...rows].join("\r\n");
+    }
+    if (exportReportType === "financial") {
+      const header = [q("Categoria"), q("Valor R$"), q("% Orçamento"), q("Qtd Pedidos")].join(sep);
+      const rows = categorySpend.map((r) =>
+        [q(r.category), r.value, r.pct, r.count].join(sep)
+      );
+      return [header, ...rows].join("\r\n");
+    }
+    // operational
+    const header = [q("Comprador"), q("Requisições"), q("Valor R$"), q("Tempo Médio (dias)"), q("SLA %")].join(sep);
+    const rows = [
+      { name: "Maria Oliveira", requests: 234, value: 1_200_000, avgDays: 4.2, sla: 92 },
+      { name: "Ana Costa", requests: 198, value: 980_000, avgDays: 5.1, sla: 88 },
+      { name: "João Pereira", requests: 176, value: 850_000, avgDays: 4.8, sla: 91 },
+      { name: "Fernanda Lima", requests: 152, value: 720_000, avgDays: 3.9, sla: 95 },
+      { name: "Carlos Souza", requests: 134, value: 650_000, avgDays: 6.2, sla: 84 },
+    ].map((r) => [q(r.name), r.requests, r.value, r.avgDays, r.sla].join(sep));
+    return [header, ...rows].join("\r\n");
+  };
+
   const handleExportGenerate = async () => {
     setExportLoading(true);
-    await new Promise((r) => setTimeout(r, 1500));
+    await new Promise((r) => setTimeout(r, 800));
     const now = new Date();
+
+    const csvContent = buildCsvContent();
+    const mimeType = exportFormat === "PDF" ? "text/plain;charset=utf-8" : "text/csv;charset=utf-8";
+    const extension = exportFormat === "PDF" ? "txt" : exportFormat === "Excel" ? "tsv" : "csv";
+    const blob = new Blob(["﻿" + csvContent], { type: mimeType });
+    const blobUrl = URL.createObjectURL(blob);
+    const filename = `vprequisicoes-${exportReportType}-${now.toISOString().slice(0, 10)}.${extension}`;
+
+    // Dispara o download imediatamente
+    const anchor = document.createElement("a");
+    anchor.href = blobUrl;
+    anchor.download = filename;
+    anchor.click();
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 30_000);
+
     setExportResult({
-      download_url: `https://storage.vprequisicoes.com/exports/analytics-${exportReportType}-${now.getTime()}.${exportFormat.toLowerCase()}`,
-      expires_at: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-      file_size_bytes: Math.floor(Math.random() * 2_000_000) + 500_000,
+      download_url: blobUrl,
+      expires_at: new Date(now.getTime() + 30 * 60 * 1000).toISOString(),
+      file_size_bytes: blob.size,
       generated_at: now.toISOString(),
     });
     setExportLoading(false);
@@ -1338,7 +1393,7 @@ function AnalyticsPage() {
             </Card>
             <div className="flex gap-2">
               <Button className="flex-1 gap-2" asChild>
-                <a href={exportResult.download_url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4" />Baixar</a>
+                <a href={exportResult.download_url} download><Download className="h-4 w-4" />Baixar</a>
               </Button>
               <Button variant="outline" className="flex-1" onClick={() => setExportResult(null)}>Novo Relatório</Button>
             </div>
