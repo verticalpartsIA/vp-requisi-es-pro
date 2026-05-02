@@ -51,6 +51,8 @@ interface Milestone {
   percentage: number;
 }
 
+const DIALOG_KEY = 'vpreq_m3';
+
 export const Route = createFileRoute("/services")({
   head: () => ({
     meta: [
@@ -104,7 +106,44 @@ function ServicesPage() {
     })));
   };
 
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(DIALOG_KEY);
+      if (!saved) return;
+      const s = JSON.parse(saved) as Record<string, unknown>;
+      if (!s.open) return;
+      setDialogOpen(true);
+      if (typeof s.step === 'number') setStep(s.step);
+      if (typeof s.serviceName === 'string') setServiceName(s.serviceName);
+      if (typeof s.serviceType === 'string') setServiceType(s.serviceType);
+      if (typeof s.description === 'string') setDescription(s.description);
+      if (typeof s.preNegotiatedPrice === 'string') setPreNegotiatedPrice(s.preNegotiatedPrice);
+      if (typeof s.scopeOfWork === 'string') setScopeOfWork(s.scopeOfWork);
+      if (typeof s.deliverables === 'string') setDeliverables(s.deliverables);
+      if (typeof s.executionLocation === 'string') setExecutionLocation(s.executionLocation);
+      if (typeof s.measurementCriteria === 'string') setMeasurementCriteria(s.measurementCriteria);
+      if (Array.isArray(s.milestones)) setMilestones(s.milestones as Milestone[]);
+      if (typeof s.deadline === 'string') setDeadline(new Date(s.deadline));
+      if (typeof s.urgencyLevel === 'string') setUrgencyLevel(s.urgencyLevel);
+      if (typeof s.justification === 'string') setJustification(s.justification);
+    } catch { /* ignore */ }
+  }, []);
+
   useEffect(() => { void loadTickets(); }, [session]);
+
+  useEffect(() => {
+    if (!dialogOpen) return;
+    try {
+      sessionStorage.setItem(DIALOG_KEY, JSON.stringify({
+        open: true, step, serviceName, serviceType, description, preNegotiatedPrice,
+        scopeOfWork, deliverables, executionLocation, measurementCriteria, milestones,
+        deadline: deadline?.toISOString(),
+        urgencyLevel, justification,
+      }));
+    } catch { /* ignore */ }
+  }, [dialogOpen, step, serviceName, serviceType, description, preNegotiatedPrice,
+      scopeOfWork, deliverables, executionLocation, measurementCriteria, milestones,
+      deadline, urgencyLevel, justification]);
 
   const totalPercentage = milestones.reduce((sum, m) => sum + (Number(m.percentage) || 0), 0);
 
@@ -121,6 +160,7 @@ function ServicesPage() {
   };
 
   const resetForm = () => {
+    sessionStorage.removeItem(DIALOG_KEY);
     setStep(0);
     setServiceName(""); setServiceType(""); setDescription(""); setPreNegotiatedPrice("");
     setScopeOfWork(""); setDeliverables(""); setExecutionLocation(""); setMeasurementCriteria("");
@@ -221,8 +261,8 @@ function ServicesPage() {
         emptyMessage="Nenhuma requisição de serviço ainda."
       />
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <Dialog open={dialogOpen} onOpenChange={(open) => { if (open) setDialogOpen(true); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto [&>button]:hidden">
           <DialogHeader>
             <DialogTitle>Nova Requisição de Serviço</DialogTitle>
             <DialogDescription>Descreva o serviço necessário.</DialogDescription>

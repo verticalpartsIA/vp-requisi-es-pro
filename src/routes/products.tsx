@@ -45,6 +45,8 @@ export const Route = createFileRoute("/products")({
   component: ProductsPage,
 });
 
+const DIALOG_KEY = 'vpreq_m1';
+
 function ProductsPage() {
   const router = useRouter();
   const { session, profile, user } = useAuth();
@@ -72,11 +74,50 @@ function ProductsPage() {
   const [justification, setJustification] = useState("");
 
   useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(DIALOG_KEY);
+      if (!saved) return;
+      const s = JSON.parse(saved) as Record<string, unknown>;
+      if (!s.open) return;
+      setDialogOpen(true);
+      if (typeof s.step === 'number') setStep(s.step);
+      if (typeof s.productName === 'string') setProductName(s.productName);
+      if (typeof s.description === 'string') setDescription(s.description);
+      if (typeof s.quantity === 'string') setQuantity(s.quantity);
+      if (typeof s.technicalSpecs === 'string') setTechnicalSpecs(s.technicalSpecs);
+      if (typeof s.brandPreference === 'string') setBrandPreference(s.brandPreference);
+      if (typeof s.modelReference === 'string') setModelReference(s.modelReference);
+      if (Array.isArray(s.referenceLinks)) setReferenceLinks(s.referenceLinks as string[]);
+      if (typeof s.onlinePurchaseSuggestion === 'string') setOnlinePurchaseSuggestion(s.onlinePurchaseSuggestion);
+      if (typeof s.deliveryDeadline === 'string') setDeliveryDeadline(new Date(s.deliveryDeadline));
+      if (typeof s.deliveryLocation === 'string') setDeliveryLocation(s.deliveryLocation);
+      if (typeof s.urgencyLevel === 'string') setUrgencyLevel(s.urgencyLevel);
+      if (typeof s.justification === 'string') setJustification(s.justification);
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
     if (!session) return;
     void listProductRequisitionsClient().then(setTickets);
   }, [session]);
 
+  useEffect(() => {
+    if (!dialogOpen) return;
+    try {
+      sessionStorage.setItem(DIALOG_KEY, JSON.stringify({
+        open: true, step, productName, description, quantity,
+        technicalSpecs, brandPreference, modelReference, referenceLinks,
+        onlinePurchaseSuggestion,
+        deliveryDeadline: deliveryDeadline?.toISOString(),
+        deliveryLocation, urgencyLevel, justification,
+      }));
+    } catch { /* ignore */ }
+  }, [dialogOpen, step, productName, description, quantity, technicalSpecs,
+      brandPreference, modelReference, referenceLinks, onlinePurchaseSuggestion,
+      deliveryDeadline, deliveryLocation, urgencyLevel, justification]);
+
   const resetForm = () => {
+    sessionStorage.removeItem(DIALOG_KEY);
     setStep(0);
     setProductName(""); setDescription(""); setQuantity("");
     setTechnicalSpecs(""); setBrandPreference("");
@@ -193,8 +234,8 @@ function ProductsPage() {
       />
 
       {/* ---- Requisition Form Dialog ---- */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <Dialog open={dialogOpen} onOpenChange={(open) => { if (open) setDialogOpen(true); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto [&>button]:hidden">
           <DialogHeader>
             <DialogTitle>Nova Requisição de Produto</DialogTitle>
             <DialogDescription>Preencha os dados para abrir a requisição.</DialogDescription>

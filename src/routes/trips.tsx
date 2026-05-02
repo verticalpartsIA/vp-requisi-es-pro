@@ -55,6 +55,8 @@ export const Route = createFileRoute("/trips")({
   component: TripsPage,
 });
 
+const DIALOG_KEY = 'vpreq_m2';
+
 function TripsPage() {
   const { session, profile, user } = useAuth();
   const [tickets, setTickets] = useState<TicketRow[]>([]);
@@ -105,9 +107,48 @@ function TripsPage() {
     })));
   };
 
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(DIALOG_KEY);
+      if (!saved) return;
+      const s = JSON.parse(saved) as Record<string, unknown>;
+      if (!s.open) return;
+      setDialogOpen(true);
+      if (typeof s.step === 'number') setStep(s.step);
+      if (typeof s.travelerName === 'string') setTravelerName(s.travelerName);
+      if (typeof s.originCity === 'string') setOriginCity(s.originCity);
+      if (typeof s.destinationCity === 'string') setDestinationCity(s.destinationCity);
+      if (typeof s.departureDate === 'string') setDepartureDate(new Date(s.departureDate));
+      if (typeof s.returnDate === 'string') setReturnDate(new Date(s.returnDate));
+      if (typeof s.transportMode === 'string') setTransportMode(s.transportMode);
+      if (typeof s.needsHotel === 'boolean') setNeedsHotel(s.needsHotel);
+      if (typeof s.hotelNights === 'string') setHotelNights(s.hotelNights);
+      if (typeof s.needsLocalCar === 'boolean') setNeedsLocalCar(s.needsLocalCar);
+      if (Array.isArray(s.purposes)) setPurposes(s.purposes as string[]);
+      if (typeof s.justification === 'string') setJustification(s.justification);
+      if (typeof s.shortNoticeJustification === 'string') setShortNoticeJustification(s.shortNoticeJustification);
+    } catch { /* ignore */ }
+  }, []);
+
   useEffect(() => { void loadTickets(); }, [session]);
 
+  useEffect(() => {
+    if (!dialogOpen) return;
+    try {
+      sessionStorage.setItem(DIALOG_KEY, JSON.stringify({
+        open: true, step, travelerName, originCity, destinationCity,
+        departureDate: departureDate?.toISOString(),
+        returnDate: returnDate?.toISOString(),
+        transportMode, needsHotel, hotelNights, needsLocalCar,
+        purposes, justification, shortNoticeJustification,
+      }));
+    } catch { /* ignore */ }
+  }, [dialogOpen, step, travelerName, originCity, destinationCity, departureDate,
+      returnDate, transportMode, needsHotel, hotelNights, needsLocalCar,
+      purposes, justification, shortNoticeJustification]);
+
   const resetForm = () => {
+    sessionStorage.removeItem(DIALOG_KEY);
     setStep(0);
     setTravelerName(""); setOriginCity(""); setDestinationCity("");
     setDepartureDate(undefined); setReturnDate(undefined); setTransportMode("");
@@ -221,8 +262,8 @@ function TripsPage() {
         emptyMessage="Nenhuma requisição de viagem ainda."
       />
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <Dialog open={dialogOpen} onOpenChange={(open) => { if (open) setDialogOpen(true); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto [&>button]:hidden">
           <DialogHeader>
             <DialogTitle>Nova Requisição de Viagem</DialogTitle>
             <DialogDescription>Preencha os dados da viagem corporativa.</DialogDescription>

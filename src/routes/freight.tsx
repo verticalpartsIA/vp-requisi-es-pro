@@ -50,6 +50,8 @@ function formatBRL(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+const DIALOG_KEY = 'vpreq_m5';
+
 export const Route = createFileRoute("/freight")({
   head: () => ({
     meta: [
@@ -104,9 +106,46 @@ function FreightPage() {
     })));
   };
 
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(DIALOG_KEY);
+      if (!saved) return;
+      const s = JSON.parse(saved) as Record<string, unknown>;
+      if (!s.open) return;
+      setDialogOpen(true);
+      if (typeof s.step === 'number') setStep(s.step);
+      if (typeof s.originAddress === 'string') setOriginAddress(s.originAddress);
+      if (typeof s.destinationAddress === 'string') setDestinationAddress(s.destinationAddress);
+      if (typeof s.vehicleType === 'string') setVehicleType(s.vehicleType);
+      if (typeof s.cargoDescription === 'string') setCargoDescription(s.cargoDescription);
+      if (typeof s.weight === 'string') setWeight(s.weight);
+      if (typeof s.dimensions === 'string') setDimensions(s.dimensions);
+      if (typeof s.fragile === 'boolean') setFragile(s.fragile);
+      if (typeof s.declaredValue === 'string') setDeclaredValue(s.declaredValue);
+      if (typeof s.pickupDate === 'string') setPickupDate(new Date(s.pickupDate));
+      if (typeof s.urgencyLevel === 'string') setUrgencyLevel(s.urgencyLevel);
+      if (typeof s.justification === 'string') setJustification(s.justification);
+    } catch { /* ignore */ }
+  }, []);
+
   useEffect(() => { void loadTickets(); }, [session]);
 
+  useEffect(() => {
+    if (!dialogOpen) return;
+    try {
+      sessionStorage.setItem(DIALOG_KEY, JSON.stringify({
+        open: true, step, originAddress, destinationAddress, vehicleType,
+        cargoDescription, weight, dimensions, fragile, declaredValue,
+        pickupDate: pickupDate?.toISOString(),
+        urgencyLevel, justification,
+      }));
+    } catch { /* ignore */ }
+  }, [dialogOpen, step, originAddress, destinationAddress, vehicleType,
+      cargoDescription, weight, dimensions, fragile, declaredValue,
+      pickupDate, urgencyLevel, justification]);
+
   const resetForm = () => {
+    sessionStorage.removeItem(DIALOG_KEY);
     setStep(0);
     setOriginAddress(""); setDestinationAddress(""); setVehicleType("");
     setCargoDescription(""); setWeight(""); setDimensions(""); setFragile(false); setDeclaredValue("");
@@ -199,8 +238,8 @@ function FreightPage() {
         emptyMessage="Nenhuma requisição de frete ainda."
       />
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <Dialog open={dialogOpen} onOpenChange={(open) => { if (open) setDialogOpen(true); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto [&>button]:hidden">
           <DialogHeader>
             <DialogTitle>Nova Requisição de Frete</DialogTitle>
             <DialogDescription>Informe os dados do transporte.</DialogDescription>

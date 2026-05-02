@@ -48,6 +48,7 @@ const STEPS = [
   { label: "Justificativa", icon: ClipboardList },
 ];
 
+const DIALOG_KEY = 'vpreq_m6';
 const LONG_RENTAL_DAYS = 30;
 
 export const Route = createFileRoute("/rental")({
@@ -104,9 +105,43 @@ function RentalPage() {
     })));
   };
 
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(DIALOG_KEY);
+      if (!saved) return;
+      const s = JSON.parse(saved) as Record<string, unknown>;
+      if (!s.open) return;
+      setDialogOpen(true);
+      if (typeof s.step === 'number') setStep(s.step);
+      if (typeof s.equipmentName === 'string') setEquipmentName(s.equipmentName);
+      if (typeof s.category === 'string') setCategory(s.category);
+      if (typeof s.specs === 'string') setSpecs(s.specs);
+      if (typeof s.quantity === 'string') setQuantity(s.quantity);
+      if (typeof s.startDate === 'string') setStartDate(new Date(s.startDate));
+      if (typeof s.endDate === 'string') setEndDate(new Date(s.endDate));
+      if (typeof s.deliveryLocation === 'string') setDeliveryLocation(s.deliveryLocation);
+      if (typeof s.urgencyLevel === 'string') setUrgencyLevel(s.urgencyLevel);
+      if (typeof s.justification === 'string') setJustification(s.justification);
+    } catch { /* ignore */ }
+  }, []);
+
   useEffect(() => { void loadTickets(); }, [session]);
 
+  useEffect(() => {
+    if (!dialogOpen) return;
+    try {
+      sessionStorage.setItem(DIALOG_KEY, JSON.stringify({
+        open: true, step, equipmentName, category, specs, quantity,
+        startDate: startDate?.toISOString(),
+        endDate: endDate?.toISOString(),
+        deliveryLocation, urgencyLevel, justification,
+      }));
+    } catch { /* ignore */ }
+  }, [dialogOpen, step, equipmentName, category, specs, quantity,
+      startDate, endDate, deliveryLocation, urgencyLevel, justification]);
+
   const resetForm = () => {
+    sessionStorage.removeItem(DIALOG_KEY);
     setStep(0);
     setEquipmentName(""); setCategory(""); setSpecs(""); setQuantity("1");
     setStartDate(undefined); setEndDate(undefined); setDeliveryLocation("");
@@ -205,8 +240,8 @@ function RentalPage() {
         emptyMessage="Nenhuma requisição de locação ainda."
       />
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <Dialog open={dialogOpen} onOpenChange={(open) => { if (open) setDialogOpen(true); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto [&>button]:hidden">
           <DialogHeader>
             <DialogTitle>Nova Requisição de Locação</DialogTitle>
             <DialogDescription>Informe o equipamento e período de locação.</DialogDescription>

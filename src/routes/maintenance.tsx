@@ -38,6 +38,8 @@ const STEPS = [
   { label: "Prioridade", icon: ClipboardList },
 ];
 
+const DIALOG_KEY = 'vpreq_m4';
+
 export const Route = createFileRoute("/maintenance")({
   head: () => ({
     meta: [
@@ -84,7 +86,37 @@ function MaintenancePage() {
     })));
   };
 
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(DIALOG_KEY);
+      if (!saved) return;
+      const s = JSON.parse(saved) as Record<string, unknown>;
+      if (!s.open) return;
+      setDialogOpen(true);
+      if (typeof s.step === 'number') setStep(s.step);
+      if (typeof s.equipmentName === 'string') setEquipmentName(s.equipmentName);
+      if (typeof s.equipmentTag === 'string') setEquipmentTag(s.equipmentTag);
+      if (typeof s.sector === 'string') setSector(s.sector);
+      if (typeof s.maintenanceType === 'string') setMaintenanceType(s.maintenanceType);
+      if (typeof s.problemDescription === 'string') setProblemDescription(s.problemDescription);
+      if (typeof s.machineDown === 'boolean') setMachineDown(s.machineDown);
+      if (typeof s.urgencyLevel === 'string') setUrgencyLevel(s.urgencyLevel);
+      if (typeof s.justification === 'string') setJustification(s.justification);
+    } catch { /* ignore */ }
+  }, []);
+
   useEffect(() => { void loadTickets(); }, [session]);
+
+  useEffect(() => {
+    if (!dialogOpen) return;
+    try {
+      sessionStorage.setItem(DIALOG_KEY, JSON.stringify({
+        open: true, step, equipmentName, equipmentTag, sector,
+        maintenanceType, problemDescription, machineDown, urgencyLevel, justification,
+      }));
+    } catch { /* ignore */ }
+  }, [dialogOpen, step, equipmentName, equipmentTag, sector,
+      maintenanceType, problemDescription, machineDown, urgencyLevel, justification]);
 
   // Quando máquina está parada, eleva urgência automaticamente
   const handleMachineDown = (checked: boolean) => {
@@ -93,6 +125,7 @@ function MaintenancePage() {
   };
 
   const resetForm = () => {
+    sessionStorage.removeItem(DIALOG_KEY);
     setStep(0);
     setEquipmentName(""); setEquipmentTag(""); setSector("");
     setMaintenanceType(""); setProblemDescription(""); setMachineDown(false);
@@ -181,8 +214,8 @@ function MaintenancePage() {
         emptyMessage="Nenhuma requisição de manutenção ainda."
       />
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <Dialog open={dialogOpen} onOpenChange={(open) => { if (open) setDialogOpen(true); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto [&>button]:hidden">
           <DialogHeader>
             <DialogTitle>Nova Requisição de Manutenção</DialogTitle>
             <DialogDescription>Informe o equipamento e o problema.</DialogDescription>
