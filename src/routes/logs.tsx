@@ -290,6 +290,51 @@ interface BottleneckAnalysis {
   escalation_required: boolean;
 }
 
+/* ── Live Ticket Detail (fetched from DB) ── */
+interface LiveTicketDetail {
+  ticket_id: string;
+  module: string;
+  status: string;
+  title: string;
+  description: string;
+  justification: string;
+  requester_name: string;
+  requester_department: string | null;
+  created_at: string;
+  completed_at: string | null;
+  suppliers: Array<{
+    id: string;
+    name: string;
+    price: number | null;
+    deadline: string | null;
+    notes: string | null;
+    proposal_received: boolean;
+    is_winner: boolean;
+  }>;
+  win_criteria: string | null;
+  approval_decision: string | null;
+  approval_level: number | null;
+  approval_value: number | null;
+  approval_decided_at: string | null;
+  approval_justification: string | null;
+  purchase_supplier: string | null;
+  purchase_price: number | null;
+  purchase_order_number: string | null;
+  payment_method: string | null;
+  purchased_at: string | null;
+  receipt_condition: string | null;
+  deliverer_name: string | null;
+  received_at: string | null;
+  receipt_notes: string | null;
+  ticket_audit_logs: Array<{
+    id: string;
+    action: string;
+    actor_name: string | null;
+    details: Record<string, unknown>;
+    created_at: string;
+  }>;
+}
+
 interface SLATarget {
   module: string;
   target_v1_to_v2: number;
@@ -748,7 +793,8 @@ function LogsPage() {
   const [activeStatusFilter, setActiveStatusFilter] = useState<"all" | "on_track" | "at_risk" | "breached">("all");
   const [auditEntriesLive, setAuditEntriesLive] = useState<AuditLogEntry[]>([]);
   const [logsLoading, setLogsLoading] = useState(true);
-  const detail = selectedTicket ? ticketDetails[selectedTicket] : null;
+  const [liveDetail, setLiveDetail] = useState<LiveTicketDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   useEffect(() => {
     if (!session) return;
@@ -786,6 +832,103 @@ function LogsPage() {
     })();
   }, [session]);
 
+  // Fetch full ticket detail from DB when user opens the side panel
+  useEffect(() => {
+    if (!selectedTicket || !session) {
+      setLiveDetail(null);
+      return;
+    }
+    (async () => {
+      setDetailLoading(true);
+      setLiveDetail(null);
+      try {
+        const { data: req } = await supabaseBrowser
+          .from("requisitions")
+          .select("id,ticket_number,module,status,title,description,justification,requester_name,requester_department,created_at,completed_at")
+          .eq("ticket_number", selectedTicket)
+          .maybeSingle();
+
+        if (!req) return;
+
+        const [{ data: quot }, { data: appr }, { data: purch }, { data: rec }, { data: logs }] = await Promise.all([
+          supabaseBrowser
+            .from("quotations")
+            .select("id,win_criteria,status,quotation_suppliers(id,supplier_name,price,deadline,notes,proposal_received,is_winner)")
+            .eq("requisition_id", req.id)
+            .maybeSingle(),
+          supabaseBrowser
+            .from("approvals")
+            .select("decision,approval_level,total_value,justification,decided_at")
+            .eq("requisition_id", req.id)
+            .maybeSingle(),
+          supabaseBrowser
+            .from("purchases")
+            .select("supplier_name,supplier_price,purchase_order_number,payment_method,purchased_at")
+            .eq("requisition_id", req.id)
+            .maybeSingle(),
+          supabaseBrowser
+            .from("receipts")
+            .select("condition,deliverer_name,notes,received_at")
+            .eq("requisition_id", req.id)
+            .maybeSingle(),
+          supabaseBrowser
+            .from("audit_logs")
+            .select("id,action,actor_name,details,created_at")
+            .eq("ticket_number", selectedTicket)
+            .order("created_at", { ascending: true }),
+        ]);
+
+        const suppliersRaw = (quot?.quotation_suppliers ?? []) as Array<{
+          id: string; supplier_name: string; price: number | null;
+          deadline: string | null; notes: string | null;
+          proposal_received: boolean; is_winner: boolean;
+        }>;
+
+        setLiveDetail({
+          ticket_id: req.ticket_number,
+          module: req.module,
+          status: req.status,
+          title: req.title,
+          description: req.description,
+          justification: req.justification,
+          requester_name: req.requester_name,
+          requester_department: req.requester_department ?? null,
+          created_at: new Date(req.created_at).toLocaleString("pt-BR"),
+          completed_at: req.completed_at ? new Date(req.completed_at).toLocaleString("pt-BR") : null,
+          suppliers: suppliersRaw.map((s) => ({
+            id: s.id, name: s.supplier_name, price: s.price,
+            deadline: s.deadline, notes: s.notes,
+            proposal_received: s.proposal_received, is_winner: s.is_winner,
+          })),
+          win_criteria: quot?.win_criteria ?? null,
+          approval_decision: appr?.decision ?? null,
+          approval_level: appr?.approval_level ?? null,
+          approval_value: appr?.total_value ?? null,
+          approval_decided_at: appr?.decided_at ? new Date(appr.decided_at).toLocaleString("pt-BR") : null,
+          approval_justification: appr?.justification ?? null,
+          purchase_supplier: purch?.supplier_name ?? null,
+          purchase_price: purch?.supplier_price ?? null,
+          purchase_order_number: purch?.purchase_order_number ?? null,
+          payment_method: purch?.payment_method ?? null,
+          purchased_at: purch?.purchased_at ? new Date(purch.purchased_at).toLocaleString("pt-BR") : null,
+          receipt_condition: rec?.condition ?? null,
+          deliverer_name: rec?.deliverer_name ?? null,
+          received_at: rec?.received_at ? new Date(rec.received_at).toLocaleString("pt-BR") : null,
+          receipt_notes: rec?.notes ?? null,
+          ticket_audit_logs: (logs ?? []).map((l) => ({
+            id: l.id,
+            action: l.action,
+            actor_name: l.actor_name ?? null,
+            details: (l.details ?? {}) as Record<string, unknown>,
+            created_at: new Date(l.created_at).toLocaleString("pt-BR"),
+          })),
+        });
+      } finally {
+        setDetailLoading(false);
+      }
+    })();
+  }, [selectedTicket, session]);
+
   // Usa dados reais quando disponíveis, fallback para mock durante carregamento
   const auditEntries = logsLoading ? [] : auditEntriesLive;
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
@@ -808,7 +951,12 @@ function LogsPage() {
     setExportLoading(true);
 
     const now = new Date();
+    // Use liveDetail when it matches the export ticket (opened from detail panel)
+    const richDetail = liveDetail?.ticket_id === exportTicketId ? liveDetail : null;
     const ticketEntries = auditEntriesLive.filter((e) => e.ticket_id === exportTicketId);
+
+    const fmtPrice = (v: number | null) =>
+      v != null ? `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "—";
 
     let content: string;
     let mimeType: string;
@@ -817,37 +965,198 @@ function LogsPage() {
     if (exportFormat === "JSON") {
       ext = "json";
       mimeType = "application/json;charset=utf-8";
-      const rows = ticketEntries.map((e) => ({
-        ticket: e.ticket_id,
-        modulo: e.module,
-        etapa: e.module_stage,
-        acao: e.action_type,
-        descricao: e.action_description,
-        responsavel: e.user_name,
-        data: e.created_at,
-      }));
-      content = JSON.stringify({ ticket: exportTicketId, exportado_em: now.toISOString(), eventos: rows }, null, 2);
+      if (richDetail) {
+        content = JSON.stringify({
+          exportado_em: now.toISOString(),
+          ticket: richDetail.ticket_id,
+          modulo: richDetail.module,
+          status: richDetail.status,
+          titulo: richDetail.title,
+          descricao: richDetail.description,
+          justificativa: richDetail.justification,
+          requisitante: richDetail.requester_name,
+          departamento: richDetail.requester_department,
+          criado_em: richDetail.created_at,
+          concluido_em: richDetail.completed_at,
+          cotacao: {
+            fornecedores: richDetail.suppliers.map((s) => ({
+              nome: s.name,
+              preco: fmtPrice(s.price),
+              prazo: s.deadline,
+              proposta_recebida: s.proposal_received,
+              vencedor: s.is_winner,
+              observacoes: s.notes,
+            })),
+            criterio_vencedor: richDetail.win_criteria,
+          },
+          aprovacao: richDetail.approval_decision ? {
+            decisao: richDetail.approval_decision,
+            nivel: richDetail.approval_level,
+            valor: fmtPrice(richDetail.approval_value),
+            data: richDetail.approval_decided_at,
+            justificativa: richDetail.approval_justification,
+          } : null,
+          compra: richDetail.purchase_supplier ? {
+            fornecedor: richDetail.purchase_supplier,
+            valor: fmtPrice(richDetail.purchase_price),
+            numero_pedido: richDetail.purchase_order_number,
+            forma_pagamento: richDetail.payment_method,
+            data: richDetail.purchased_at,
+          } : null,
+          recebimento: richDetail.receipt_condition ? {
+            condicao: richDetail.receipt_condition,
+            entregador: richDetail.deliverer_name,
+            data: richDetail.received_at,
+            observacoes: richDetail.receipt_notes,
+          } : null,
+          historico: richDetail.ticket_audit_logs.map((l) => ({
+            acao: l.action,
+            responsavel: l.actor_name,
+            data: l.created_at,
+            detalhes: l.details,
+          })),
+        }, null, 2);
+      } else {
+        const rows = ticketEntries.map((e) => ({
+          ticket: e.ticket_id, modulo: e.module, etapa: e.module_stage,
+          acao: e.action_type, descricao: e.action_description,
+          responsavel: e.user_name, data: e.created_at,
+        }));
+        content = JSON.stringify({ ticket: exportTicketId, exportado_em: now.toISOString(), eventos: rows }, null, 2);
+      }
     } else if (exportFormat === "CSV") {
       ext = "csv";
       mimeType = "text/csv;charset=utf-8";
-      const header = "Ticket;Modulo;Etapa;Acao;Descricao;Responsavel;Data\n";
-      const rows = ticketEntries.map((e) =>
-        `${e.ticket_id};${e.module};${e.module_stage};${e.action_type};${e.action_description};${e.user_name};${e.created_at}`
-      ).join("\n");
-      content = header + rows;
+      if (richDetail) {
+        const rows: string[] = [
+          "Secao;Campo;Valor",
+          `Requisicao;Ticket;${richDetail.ticket_id}`,
+          `Requisicao;Titulo;${richDetail.title}`,
+          `Requisicao;Requisitante;${richDetail.requester_name}`,
+          `Requisicao;Departamento;${richDetail.requester_department ?? "—"}`,
+          `Requisicao;Status;${richDetail.status}`,
+          `Requisicao;Criado em;${richDetail.created_at}`,
+          `Requisicao;Concluido em;${richDetail.completed_at ?? "—"}`,
+          ...richDetail.suppliers.map((s) =>
+            `Cotacao;Fornecedor;${s.name};Preco;${s.price != null ? s.price.toFixed(2) : "—"};Vencedor;${s.is_winner ? "SIM" : "NAO"};Proposta;${s.proposal_received ? "Recebida" : "Pendente"}`
+          ),
+          richDetail.win_criteria ? `Cotacao;Criterio Vencedor;${richDetail.win_criteria}` : "",
+          richDetail.approval_decision
+            ? `Aprovacao;Decisao;${richDetail.approval_decision};Nivel;${richDetail.approval_level ?? "—"};Valor;${richDetail.approval_value?.toFixed(2) ?? "—"};Data;${richDetail.approval_decided_at ?? "—"}`
+            : "",
+          richDetail.purchase_supplier
+            ? `Compra;Fornecedor;${richDetail.purchase_supplier};Valor;${richDetail.purchase_price?.toFixed(2) ?? "—"};Pedido;${richDetail.purchase_order_number ?? "—"};Data;${richDetail.purchased_at ?? "—"}`
+            : "",
+          richDetail.receipt_condition
+            ? `Recebimento;Condicao;${richDetail.receipt_condition};Entregador;${richDetail.deliverer_name ?? "—"};Data;${richDetail.received_at ?? "—"}`
+            : "",
+          ...richDetail.ticket_audit_logs.map((l) =>
+            `Historico;Acao;${l.action};Responsavel;${l.actor_name ?? "Sistema"};Data;${l.created_at}`
+          ),
+        ].filter(Boolean);
+        content = rows.join("\n");
+      } else {
+        const header = "Ticket;Modulo;Etapa;Acao;Descricao;Responsavel;Data\n";
+        const rows = ticketEntries.map((e) =>
+          `${e.ticket_id};${e.module};${e.module_stage};${e.action_type};${e.action_description};${e.user_name};${e.created_at}`
+        ).join("\n");
+        content = header + rows;
+      }
     } else {
-      // PDF → exporta como texto formatado (sem dependência de lib PDF)
+      // PDF → texto formatado rico
       ext = "txt";
       mimeType = "text/plain;charset=utf-8";
-      const lines = [
-        `HISTÓRICO DE AUDITORIA — ${exportTicketId}`,
-        `Exportado em: ${now.toLocaleString("pt-BR")}`,
-        "─".repeat(60),
-        ...ticketEntries.map((e) =>
-          `[${e.created_at}] ${e.module_stage} | ${e.action_description} | ${e.user_name}`
-        ),
-      ];
-      content = lines.join("\n");
+      if (richDetail) {
+        const f = (v: string | null | undefined) => v || "—";
+        const sep = "═".repeat(60);
+        const sub = "─".repeat(60);
+        const lines: string[] = [
+          sep,
+          `  HISTÓRICO COMPLETO — ${richDetail.ticket_id}`,
+          `  Exportado em: ${now.toLocaleString("pt-BR")}`,
+          sep,
+          "",
+          "▶ REQUISIÇÃO (V1)",
+          sub,
+          `  Título:        ${richDetail.title}`,
+          `  Descrição:     ${richDetail.description}`,
+          `  Justificativa: ${richDetail.justification}`,
+          `  Requisitante:  ${richDetail.requester_name}`,
+          `  Departamento:  ${f(richDetail.requester_department)}`,
+          `  Módulo:        ${richDetail.module}  |  Status: ${richDetail.status}`,
+          `  Criado em:     ${richDetail.created_at}`,
+          `  Concluído em:  ${f(richDetail.completed_at)}`,
+          "",
+        ];
+
+        if (richDetail.suppliers.length > 0) {
+          lines.push("▶ COTAÇÃO (V2) — FORNECEDORES", sub);
+          richDetail.suppliers.forEach((s, i) => {
+            lines.push(`  [${i + 1}] ${s.name}${s.is_winner ? "  ◀ VENCEDOR" : ""}`);
+            lines.push(`      Preço:    ${fmtPrice(s.price)}`);
+            lines.push(`      Prazo:    ${f(s.deadline)}`);
+            lines.push(`      Proposta: ${s.proposal_received ? "Recebida" : "Pendente"}`);
+            if (s.notes) lines.push(`      Obs.:     ${s.notes}`);
+          });
+          if (richDetail.win_criteria)
+            lines.push(`  Critério de seleção: ${richDetail.win_criteria}`);
+          lines.push("");
+        }
+
+        if (richDetail.approval_decision) {
+          const dec = richDetail.approval_decision === "approved" ? "APROVADO"
+            : richDetail.approval_decision === "rejected" ? "REJEITADO" : "PENDENTE";
+          lines.push("▶ APROVAÇÃO (V3)", sub);
+          lines.push(`  Decisão:       ${dec} (Nível ${richDetail.approval_level ?? "—"})`);
+          lines.push(`  Valor Total:   ${fmtPrice(richDetail.approval_value)}`);
+          lines.push(`  Data Decisão:  ${f(richDetail.approval_decided_at)}`);
+          if (richDetail.approval_justification)
+            lines.push(`  Justificativa: ${richDetail.approval_justification}`);
+          lines.push("");
+        }
+
+        if (richDetail.purchase_supplier) {
+          lines.push("▶ COMPRA (V4)", sub);
+          lines.push(`  Fornecedor:  ${richDetail.purchase_supplier}`);
+          lines.push(`  Valor Pago:  ${fmtPrice(richDetail.purchase_price)}`);
+          lines.push(`  Nº Pedido:   ${f(richDetail.purchase_order_number)}`);
+          lines.push(`  Pagamento:   ${f(richDetail.payment_method)}`);
+          lines.push(`  Data Compra: ${f(richDetail.purchased_at)}`);
+          lines.push("");
+        }
+
+        if (richDetail.receipt_condition) {
+          const cond = richDetail.receipt_condition === "ok" ? "OK — Conforme"
+            : richDetail.receipt_condition === "damaged" ? "Danificado" : "Divergente";
+          lines.push("▶ RECEBIMENTO (V5)", sub);
+          lines.push(`  Condição:    ${cond}`);
+          lines.push(`  Entregador:  ${f(richDetail.deliverer_name)}`);
+          lines.push(`  Data Receb.: ${f(richDetail.received_at)}`);
+          if (richDetail.receipt_notes) lines.push(`  Obs.:        ${richDetail.receipt_notes}`);
+          lines.push("");
+        }
+
+        if (richDetail.ticket_audit_logs.length > 0) {
+          lines.push("▶ HISTÓRICO DE AÇÕES", sub);
+          richDetail.ticket_audit_logs.forEach((l) => {
+            lines.push(`  [${l.created_at}] ${l.action.replace(/_/g, " ")} — ${l.actor_name ?? "Sistema"}`);
+          });
+          lines.push("");
+        }
+
+        lines.push(sep);
+        content = lines.join("\n");
+      } else {
+        const lines = [
+          `HISTÓRICO DE AUDITORIA — ${exportTicketId}`,
+          `Exportado em: ${now.toLocaleString("pt-BR")}`,
+          "─".repeat(60),
+          ...ticketEntries.map((e) =>
+            `[${e.created_at}] ${e.module_stage} | ${e.action_description} | ${e.user_name}`
+          ),
+        ];
+        content = lines.join("\n");
+      }
     }
 
     const blob = new Blob(["﻿" + content], { type: mimeType });
@@ -1436,256 +1745,246 @@ function LogsPage() {
       {/* Ticket Detail Sheet */}
       <Sheet open={!!selectedTicket} onOpenChange={(open) => !open && setSelectedTicket(null)}>
         <SheetContent className="sm:max-w-lg overflow-y-auto">
-          {detail && (
+          {/* Loading state */}
+          {detailLoading && (
+            <div className="flex items-center justify-center h-48 gap-3 text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span className="text-sm">Carregando detalhes...</span>
+            </div>
+          )}
+
+          {/* Not found */}
+          {!detailLoading && !liveDetail && selectedTicket && (
+            <div className="flex flex-col items-center justify-center h-48 gap-2 text-muted-foreground">
+              <FileText className="h-10 w-10 opacity-30" />
+              <p className="text-sm">Ticket não encontrado</p>
+              <p className="text-xs font-mono">{selectedTicket}</p>
+            </div>
+          )}
+
+          {/* Rich detail */}
+          {!detailLoading && liveDetail && (
             <>
               <SheetHeader>
-                <SheetTitle className="flex items-center gap-2">
-                  <span className="font-mono">{detail.ticket_id}</span>
-                  <Badge variant="outline" className="text-[10px]">
-                    {detail.module}
-                  </Badge>
-                  <Badge
-                    variant="outline"
-                    className={`text-[10px] ${
-                      detail.status === "FINALIZADO"
-                        ? "bg-emerald-100 text-emerald-700 border-emerald-200"
-                        : "bg-blue-100 text-blue-700 border-blue-200"
-                    }`}
-                  >
-                    {detail.status.replace(/_/g, " ")}
+                <SheetTitle className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono">{liveDetail.ticket_id}</span>
+                  <Badge variant="outline" className="text-[10px]">{liveDetail.module}</Badge>
+                  <Badge variant="outline" className={`text-[10px] ${
+                    ["CONCLUÍDO", "RECEBIMENTO"].includes(liveDetail.status)
+                      ? "bg-emerald-100 text-emerald-700 border-emerald-200"
+                      : "bg-blue-100 text-blue-700 border-blue-200"
+                  }`}>
+                    {liveDetail.status}
                   </Badge>
                 </SheetTitle>
               </SheetHeader>
 
               <div className="space-y-5 mt-6">
                 {/* Export Button */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full gap-2"
-                  onClick={() => handleOpenExport(detail.ticket_id)}
-                >
+                <Button variant="outline" size="sm" className="w-full gap-2"
+                  onClick={() => handleOpenExport(liveDetail.ticket_id)}>
                   <FileDown className="h-4 w-4" />
-                  Exportar Histórico do Ticket
+                  Exportar Histórico Completo
                 </Button>
 
-                {/* Lifecycle Summary */}
-                <div className="space-y-3">
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Ciclo de Vida
+                {/* V1 — Requisição */}
+                <div className="space-y-2">
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="inline-flex items-center justify-center h-4 w-4 rounded-full bg-blue-100 text-blue-700 text-[9px] font-bold">V1</span>
+                    Requisição
                   </h3>
                   <Card>
-                    <CardContent className="p-4 space-y-3">
-                      <div className="grid grid-cols-2 gap-3">
+                    <CardContent className="p-4 space-y-2">
+                      <p className="text-sm font-semibold text-foreground">{liveDetail.title}</p>
+                      <p className="text-xs text-muted-foreground">{liveDetail.description}</p>
+                      {liveDetail.justification && (
+                        <p className="text-xs bg-muted/50 rounded px-2 py-1 text-muted-foreground">
+                          <span className="font-medium text-foreground">Justificativa:</span> {liveDetail.justification}
+                        </p>
+                      )}
+                      <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">Requisitante</p>
+                          <p className="font-medium">{liveDetail.requester_name}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">Departamento</p>
+                          <p className="font-medium">{liveDetail.requester_department ?? "—"}</p>
+                        </div>
                         <div>
                           <p className="text-[10px] text-muted-foreground">Criado em</p>
-                          <p className="text-sm font-medium text-foreground">{detail.lifecycle.created_at}</p>
+                          <p className="font-medium">{liveDetail.created_at}</p>
                         </div>
                         <div>
-                          <p className="text-[10px] text-muted-foreground">
-                            {detail.lifecycle.completed_at ? "Concluído em" : "Em andamento"}
-                          </p>
-                          <p className="text-sm font-medium text-foreground">
-                            {detail.lifecycle.completed_at ?? "—"}
-                          </p>
+                          <p className="text-[10px] text-muted-foreground">{liveDetail.completed_at ? "Concluído em" : "Status"}</p>
+                          <p className="font-medium">{liveDetail.completed_at ?? liveDetail.status}</p>
                         </div>
-                        <div>
-                          <p className="text-[10px] text-muted-foreground">Duração Total</p>
-                          <p className="text-sm font-bold text-foreground">
-                            {detail.lifecycle.sla_formatted}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] text-muted-foreground">Meta SLA</p>
-                          <p className="text-sm font-medium text-foreground">
-                            {formatSla(detail.lifecycle.sla_target_hours)}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* SLA Progress */}
-                      <div>
-                        <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
-                          <span>{detail.lifecycle.sla_percentage_used.toFixed(1)}% utilizado</span>
-                          <span className={detail.lifecycle.is_within_sla ? "text-emerald-600" : "text-red-500"}>
-                            {detail.lifecycle.is_within_sla ? "✓ Dentro do SLA" : "✗ SLA Excedido"}
-                          </span>
-                        </div>
-                        <Progress
-                          value={Math.min(detail.lifecycle.sla_percentage_used, 100)}
-                          className="h-2"
-                        />
                       </div>
                     </CardContent>
                   </Card>
                 </div>
 
-                {/* Stages Summary */}
-                <div className="space-y-3">
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Etapas
-                  </h3>
+                {/* V2 — Cotação */}
+                {liveDetail.suppliers.length > 0 && (
                   <div className="space-y-2">
-                    {detail.stages_summary.map((stage, idx) => {
-                      const stageLabel = stage.stage.replace("_", " · ");
-                      return (
-                        <div
-                          key={stage.stage}
-                          className={`rounded-lg border p-3 ${
-                            stage.status === "IN_PROGRESS"
-                              ? "border-blue-200 bg-blue-50/50"
-                              : stage.status === "COMPLETED"
-                                ? "border-border bg-card"
-                                : "border-dashed border-muted bg-muted/20"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <div
-                                className={`h-2.5 w-2.5 rounded-full ${
-                                  stage.status === "COMPLETED"
-                                    ? "bg-emerald-500"
-                                    : stage.status === "IN_PROGRESS"
-                                      ? "bg-blue-500 animate-pulse"
-                                      : "bg-muted-foreground/30"
-                                }`}
-                              />
-                              <span className="text-xs font-semibold text-foreground">
-                                {stageLabel}
-                              </span>
-                            </div>
-                            <Badge
-                              variant="outline"
-                              className={`text-[10px] ${
-                                stage.status === "COMPLETED"
-                                  ? "bg-emerald-100 text-emerald-700 border-emerald-200"
-                                  : stage.status === "IN_PROGRESS"
-                                    ? "bg-blue-100 text-blue-700 border-blue-200"
-                                    : "text-muted-foreground"
-                              }`}
-                            >
-                              {stage.status === "COMPLETED"
-                                ? "Concluído"
-                                : stage.status === "IN_PROGRESS"
-                                  ? "Em andamento"
-                                  : "Pendente"}
-                            </Badge>
-                          </div>
-                          {stage.status !== "PENDING" && (
-                            <div className="flex items-center gap-3 mt-2 text-[11px] text-muted-foreground">
-                              <span className="flex items-center gap-1">
-                                <User className="h-3 w-3" />
-                                {stage.actor} ({stage.actor_role})
-                              </span>
-                              {stage.duration_hours > 0 && (
-                                <span className="flex items-center gap-1">
-                                  <Hourglass className="h-3 w-3" />
-                                  {formatSla(stage.duration_hours)}
-                                </span>
-                              )}
-                              {stage.started_at && (
-                                <span className="flex items-center gap-1">
-                                  <Clock className="h-3 w-3" />
-                                  {stage.started_at}
-                                </span>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Bottleneck */}
-                {detail.bottleneck_analysis && detail.bottleneck_analysis.is_bottleneck && (
-                  <div className="space-y-3">
-                    <h3 className="text-xs font-semibold text-red-500 uppercase tracking-wider flex items-center gap-1.5">
-                      <OctagonAlert className="h-3.5 w-3.5" />
-                      Gargalo
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                      <span className="inline-flex items-center justify-center h-4 w-4 rounded-full bg-amber-100 text-amber-700 text-[9px] font-bold">V2</span>
+                      Cotação — {liveDetail.suppliers.length} fornecedor{liveDetail.suppliers.length !== 1 ? "es" : ""}
                     </h3>
-                    <div className="rounded-lg border border-red-200 bg-red-50/30 p-3 space-y-2">
-                      <div className="flex items-center gap-2 text-xs">
-                        <span className="font-semibold text-foreground">
-                          Parado em {detail.bottleneck_analysis.current_stage}
-                        </span>
-                        <span className="text-red-600 font-semibold text-[10px]">
-                          {formatSla(detail.bottleneck_analysis.hours_in_current_stage)} / meta {formatSla(detail.bottleneck_analysis.target_hours_for_stage)}
-                        </span>
-                      </div>
-                      {detail.bottleneck_analysis.blocking_reason && (
-                        <p className="text-[11px] text-red-600">
-                          {detail.bottleneck_analysis.blocking_reason}
-                        </p>
-                      )}
-                      <div className="flex items-start gap-1.5 text-[11px] text-amber-700 bg-amber-50 px-2 py-1 rounded">
-                        <Lightbulb className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                        <span>{detail.bottleneck_analysis.recommendation}</span>
-                      </div>
-                      {detail.bottleneck_analysis.escalation_required && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-red-100 border border-red-300 px-2 py-0.5 text-[10px] font-semibold text-red-700">
-                          <Bell className="h-3 w-3" />
-                          Escalonamento necessário
-                        </span>
+                    <div className="space-y-2">
+                      {liveDetail.suppliers.map((s) => (
+                        <Card key={s.id} className={s.is_winner ? "border-emerald-300 bg-emerald-50/30" : ""}>
+                          <CardContent className="p-3">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-xs font-semibold text-foreground">{s.name}</span>
+                              {s.is_winner && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 border border-emerald-300 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                                  <Check className="h-3 w-3" />Vencedor
+                                </span>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+                              <span>Preço: <span className={`font-semibold ${s.is_winner ? "text-emerald-700" : "text-foreground"}`}>
+                                {s.price != null ? `R$ ${s.price.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "—"}
+                              </span></span>
+                              <span>Prazo: <span className="font-medium text-foreground">{s.deadline ?? "—"}</span></span>
+                              <span>Proposta: <span className="font-medium text-foreground">{s.proposal_received ? "Recebida" : "Pendente"}</span></span>
+                            </div>
+                            {s.notes && <p className="text-[10px] text-muted-foreground mt-1 italic">{s.notes}</p>}
+                          </CardContent>
+                        </Card>
+                      ))}
+                      {liveDetail.win_criteria && (
+                        <div className="flex items-start gap-1.5 text-[11px] text-amber-700 bg-amber-50 px-2 py-1.5 rounded border border-amber-200">
+                          <Lightbulb className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                          <span><span className="font-semibold">Critério:</span> {liveDetail.win_criteria}</span>
+                        </div>
                       )}
                     </div>
                   </div>
                 )}
 
-                {/* Audit Logs for this ticket */}
-                <div className="space-y-3">
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Histórico de Ações
-                  </h3>
-                  <div className="relative space-y-0">
-                    <div className="absolute left-[7px] top-2 bottom-2 w-px bg-border" />
-                    {(auditEntries.filter((e) => e.ticket_id === detail.ticket_id)).map((entry, idx, arr) => {
-                      const status = deriveSlaStatus(entry);
-                      return (
-                        <div key={entry.id} className="relative pl-7 pb-4 last:pb-0">
-                          <div
-                            className={`absolute left-0 top-1 h-[14px] w-[14px] rounded-full border-2 ${
-                              status === "breach"
-                                ? "border-red-400 bg-red-100"
-                                : status === "warning"
-                                  ? "border-amber-400 bg-amber-100"
-                                  : "border-emerald-400 bg-emerald-100"
-                            }`}
-                          />
+                {/* V3 — Aprovação */}
+                {liveDetail.approval_decision && (
+                  <div className="space-y-2">
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                      <span className="inline-flex items-center justify-center h-4 w-4 rounded-full bg-purple-100 text-purple-700 text-[9px] font-bold">V3</span>
+                      Aprovação
+                    </h3>
+                    <Card className={
+                      liveDetail.approval_decision === "approved" ? "border-emerald-200" :
+                      liveDetail.approval_decision === "rejected" ? "border-red-200" : ""
+                    }>
+                      <CardContent className="p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-semibold text-foreground">Nível {liveDetail.approval_level ?? "—"}</span>
+                          <Badge variant="outline" className={`text-[10px] ${
+                            liveDetail.approval_decision === "approved" ? "bg-emerald-100 text-emerald-700 border-emerald-200" :
+                            liveDetail.approval_decision === "rejected" ? "bg-red-100 text-red-700 border-red-200" :
+                            "text-muted-foreground"
+                          }`}>
+                            {liveDetail.approval_decision === "approved" ? "Aprovado" :
+                             liveDetail.approval_decision === "rejected" ? "Rejeitado" : "Pendente"}
+                          </Badge>
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+                          <span>Valor: <span className="font-semibold text-foreground">
+                            {liveDetail.approval_value != null
+                              ? `R$ ${liveDetail.approval_value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+                              : "—"}
+                          </span></span>
+                          <span>Data: <span className="font-medium text-foreground">{liveDetail.approval_decided_at ?? "—"}</span></span>
+                        </div>
+                        {liveDetail.approval_justification && (
+                          <p className="text-[10px] text-muted-foreground mt-1.5 italic">{liveDetail.approval_justification}</p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+
+                {/* V4 — Compra */}
+                {liveDetail.purchase_supplier && (
+                  <div className="space-y-2">
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                      <span className="inline-flex items-center justify-center h-4 w-4 rounded-full bg-blue-100 text-blue-700 text-[9px] font-bold">V4</span>
+                      Compra
+                    </h3>
+                    <Card>
+                      <CardContent className="p-3">
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+                          <span className="col-span-2">Fornecedor: <span className="font-semibold text-foreground">{liveDetail.purchase_supplier}</span></span>
+                          <span>Valor: <span className="font-semibold text-foreground">
+                            {liveDetail.purchase_price != null
+                              ? `R$ ${liveDetail.purchase_price.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+                              : "—"}
+                          </span></span>
+                          <span>Pagamento: <span className="font-medium text-foreground">{liveDetail.payment_method ?? "—"}</span></span>
+                          <span>Nº Pedido: <span className="font-medium text-foreground">{liveDetail.purchase_order_number ?? "—"}</span></span>
+                          <span>Data: <span className="font-medium text-foreground">{liveDetail.purchased_at ?? "—"}</span></span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+
+                {/* V5 — Recebimento */}
+                {liveDetail.receipt_condition && (
+                  <div className="space-y-2">
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                      <span className="inline-flex items-center justify-center h-4 w-4 rounded-full bg-emerald-100 text-emerald-700 text-[9px] font-bold">V5</span>
+                      Recebimento
+                    </h3>
+                    <Card className={
+                      liveDetail.receipt_condition === "ok" ? "border-emerald-200" :
+                      liveDetail.receipt_condition === "damaged" ? "border-red-200" : "border-amber-200"
+                    }>
+                      <CardContent className="p-3">
+                        <Badge variant="outline" className={`text-[10px] mb-2 ${
+                          liveDetail.receipt_condition === "ok" ? "bg-emerald-100 text-emerald-700 border-emerald-200" :
+                          liveDetail.receipt_condition === "damaged" ? "bg-red-100 text-red-700 border-red-200" :
+                          "bg-amber-100 text-amber-700 border-amber-200"
+                        }`}>
+                          {liveDetail.receipt_condition === "ok" ? "OK — Conforme" :
+                           liveDetail.receipt_condition === "damaged" ? "Danificado" : "Divergente"}
+                        </Badge>
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+                          <span>Entregador: <span className="font-medium text-foreground">{liveDetail.deliverer_name ?? "—"}</span></span>
+                          <span>Data: <span className="font-medium text-foreground">{liveDetail.received_at ?? "—"}</span></span>
+                        </div>
+                        {liveDetail.receipt_notes && (
+                          <p className="text-[10px] text-muted-foreground mt-1 italic">{liveDetail.receipt_notes}</p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+
+                {/* Histórico de Ações */}
+                {liveDetail.ticket_audit_logs.length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      Histórico de Ações
+                    </h3>
+                    <div className="relative space-y-0">
+                      <div className="absolute left-[7px] top-2 bottom-2 w-px bg-border" />
+                      {liveDetail.ticket_audit_logs.map((log) => (
+                        <div key={log.id} className="relative pl-7 pb-4 last:pb-0">
+                          <div className="absolute left-0 top-1 h-[14px] w-[14px] rounded-full border-2 border-blue-400 bg-blue-100" />
                           <div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <Badge variant="outline" className="text-[10px]">
-                                {entry.module_stage}
-                              </Badge>
-                              <span className="text-xs font-semibold text-foreground">
-                                {entry.action_description}
-                              </span>
-                            </div>
-                            {entry.metadata && (
-                              <div className="flex flex-wrap gap-1.5 mt-1">
-                                {entry.metadata.from_status && entry.metadata.to_status && (
-                                  <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
-                                    {entry.metadata.from_status} → {entry.metadata.to_status}
-                                  </span>
-                                )}
-                                {entry.metadata.supplier_name && (
-                                  <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
-                                    {entry.metadata.supplier_name}
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                            <div className="flex items-center gap-2.5 mt-1 text-[10px] text-muted-foreground">
-                              <span>{entry.user_name}</span>
-                              <span>{entry.created_at}</span>
-                              <span>SLA: {formatSla(entry.sla_elapsed_hours)}</span>
+                            <span className="text-xs font-semibold text-foreground">
+                              {mapActionToDescription(log.action, log.details)}
+                            </span>
+                            <div className="flex items-center gap-2.5 mt-0.5 text-[10px] text-muted-foreground">
+                              <span>{log.actor_name ?? "Sistema"}</span>
+                              <span>{log.created_at}</span>
                             </div>
                           </div>
                         </div>
-                      );
-                    })}
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             </>
           )}
