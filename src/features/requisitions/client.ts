@@ -90,7 +90,8 @@ export async function createProductRequisitionClient(input: ProductRequisitionIn
       },
     });
 
-  if (logError) throw new Error(friendlySupabaseError(logError));
+  // audit_log é secundário — não bloqueia a requisição se falhar
+  if (logError) console.warn("[audit_logs] insert failed:", logError.message);
 
   return {
     id: data.id,
