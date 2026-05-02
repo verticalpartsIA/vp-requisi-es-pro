@@ -135,16 +135,20 @@ async function syncSuppliers(quotationId: string, suppliers: SupplierEntry[]) {
     if (error) throw new Error(friendlySupabaseError(error));
   }
 
-  const payload = suppliers.map((supplier) => ({
-    id: supplier.id,
-    quotation_id: quotationId,
-    supplier_name: supplier.name.trim(),
-    price: supplier.price.trim() ? Number(supplier.price.replace(",", ".")) : null,
-    deadline: supplier.deadline || null,
-    notes: supplier.notes || null,
-    proposal_received: supplier.proposalReceived,
-    is_winner: supplier.isWinner ?? false,
-  }));
+  const payload = suppliers.map((supplier) => {
+    const row: Record<string, unknown> = {
+      quotation_id: quotationId,
+      supplier_name: supplier.name.trim(),
+      price: supplier.price.trim() ? Number(supplier.price.replace(",", ".")) : null,
+      deadline: supplier.deadline || null,
+      notes: supplier.notes || null,
+      proposal_received: supplier.proposalReceived,
+      is_winner: supplier.isWinner ?? false,
+    };
+    // Só inclui id quando já existe (evita enviar null/undefined → violação NOT NULL)
+    if (supplier.id) row.id = supplier.id;
+    return row;
+  });
 
   // Upsert sem SELECT para não depender de policy de SELECT encadeada
   const { error: upsertError } = await supabaseBrowser
@@ -165,7 +169,14 @@ async function syncSuppliers(quotationId: string, suppliers: SupplierEntry[]) {
 
 export async function saveQuotationSuppliersClient(requisitionId: string, suppliers: SupplierEntry[]) {
   const quotationId = await ensureQuotation(requisitionId, "awaiting_proposals");
-  const savedSuppliers = await syncSuppliers(quotationId, suppliers);
+  let savedSuppliers: Awaited<ReturnType<typeof syncSuppliers>>;
+  try {
+    savedSuppliers = await syncSuppliers(quotationId, suppliers);
+  } catch (err) {
+    // Rollback: volta status da cotação para "pending" para evitar registro órfão
+    await supabaseBrowser.from("quotations").update({ status: "pending" }).eq("id", quotationId);
+    throw err;
+  }
 
   const { data: requisition, error: requisitionError } = await supabaseBrowser
     .from("requisitions")

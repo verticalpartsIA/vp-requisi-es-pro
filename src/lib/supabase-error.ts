@@ -22,5 +22,12 @@ export function friendlySupabaseError(error: unknown): string {
   if (msg.includes("JWT") || msg.includes("invalid token") || msg.includes("token is expired")) {
     return "Sessão expirada. Faça login novamente.";
   }
+  if (
+    msg.includes("Invalid login credentials") ||
+    msg.includes("invalid_credentials") ||
+    msg.includes("Email not confirmed")
+  ) {
+    return "E-mail ou senha incorretos. Verifique seus dados.";
+  }
   return msg || "Não foi possível realizar a operação. Tente novamente.";
 }

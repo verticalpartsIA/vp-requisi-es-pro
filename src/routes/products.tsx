@@ -144,6 +144,7 @@ function ProductsPage() {
 
   const handleNext = () => {
     if (!validateStep()) return;
+    toast.dismiss();
     setStep((s) => Math.min(s + 1, STEPS.length - 1));
   };
 
@@ -358,6 +359,7 @@ function ProductsPage() {
                       disabled={(d) => d < minDate}
                       initialFocus
                       className="p-3 pointer-events-auto"
+                      locale={ptBR}
                     />
                   </PopoverContent>
                 </Popover>

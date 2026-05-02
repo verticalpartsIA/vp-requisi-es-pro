@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabaseBrowser } from "@/lib/supabase-browser";
+import { useAuth } from "@/features/auth/auth-context";
 import {
   ScrollText,
   Clock,
@@ -712,7 +714,31 @@ function metricColor(status: SlaStatus) {
  *  Page Component
  * ──────────────────────────────────────────────── */
 
+function mapActionToStage(action: string): string {
+  if (action.startsWith("QUOTATION")) return "V2";
+  if (action.startsWith("WINNER") || action.startsWith("APPROVAL")) return "V3";
+  if (action.startsWith("PURCHASE")) return "V4";
+  if (action.startsWith("RECEIPT")) return "V5";
+  return "V1";
+}
+
+function mapActionToDescription(action: string, details: Record<string, unknown>): string {
+  const map: Record<string, string> = {
+    QUOTATION_STARTED: "Cotação iniciada",
+    WINNER_SELECTED: "Fornecedor vencedor selecionado",
+    APPROVAL_REQUESTED: "Enviado para aprovação",
+    APPROVED: "Aprovado",
+    REJECTED: "Rejeitado",
+    PURCHASE_COMPLETED: "Compra concluída",
+    RECEIPT_CONFIRMED: "Recebimento confirmado",
+  };
+  const base = map[action] ?? action.replace(/_/g, " ").toLowerCase();
+  const suppliersCount = typeof details.suppliers_count === "number" ? ` — ${details.suppliers_count} fornecedores` : "";
+  return base + suppliersCount;
+}
+
 function LogsPage() {
+  const { session } = useAuth();
   const [search, setSearch] = useState("");
   const [moduleFilter, setModuleFilter] = useState("Todos");
   const [stageFilter, setStageFilter] = useState("Todos");
@@ -720,7 +746,48 @@ function LogsPage() {
   const [expandedTicket, setExpandedTicket] = useState<string | null>(null);
   const [selectedTicket, setSelectedTicket] = useState<string | null>(null);
   const [activeStatusFilter, setActiveStatusFilter] = useState<"all" | "on_track" | "at_risk" | "breached">("all");
+  const [auditEntriesLive, setAuditEntriesLive] = useState<AuditLogEntry[]>([]);
+  const [logsLoading, setLogsLoading] = useState(true);
   const detail = selectedTicket ? ticketDetails[selectedTicket] : null;
+
+  useEffect(() => {
+    if (!session) return;
+    (async () => {
+      setLogsLoading(true);
+      const { data } = await supabaseBrowser
+        .from("audit_logs")
+        .select("id,ticket_number,action,actor_name,details,created_at")
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (data) {
+        setAuditEntriesLive(
+          data.map((row) => {
+            const tn = row.ticket_number ?? "??-000000";
+            const mod = tn.slice(0, 2);
+            const det = (row.details ?? {}) as Record<string, unknown>;
+            return {
+              id: row.id,
+              ticket_id: tn,
+              module: mod,
+              action_type: row.action,
+              action_description: mapActionToDescription(row.action, det),
+              module_stage: mapActionToStage(row.action),
+              user_name: row.actor_name ?? "Sistema",
+              user_role: "—",
+              user_department: "—",
+              created_at: new Date(row.created_at).toLocaleString("pt-BR"),
+              sla_elapsed_hours: 0,
+              is_sla_breach: false,
+            } satisfies AuditLogEntry;
+          }),
+        );
+      }
+      setLogsLoading(false);
+    })();
+  }, [session]);
+
+  // Usa dados reais quando disponíveis, fallback para mock durante carregamento
+  const auditEntries = logsLoading ? [] : auditEntriesLive;
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [exportTicketId, setExportTicketId] = useState<string | null>(null);
   const [exportFormat, setExportFormat] = useState<ExportFormat>("PDF");

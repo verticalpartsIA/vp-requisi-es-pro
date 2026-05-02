@@ -149,13 +149,13 @@ function MaintenancePage() {
     return true;
   };
 
-  const handleNext = () => { if (validateStep()) setStep((s) => Math.min(s + 1, STEPS.length - 1)); };
+  const handleNext = () => { if (validateStep()) { toast.dismiss(); setStep((s) => Math.min(s + 1, STEPS.length - 1)); } };
 
   const handleSubmit = async () => {
     if (!validateStep()) return;
     setIsSubmitting(true);
     try {
-      const { data, error } = await supabaseBrowser
+      const { error } = await supabaseBrowser
         .from("requisitions")
         .insert({
           module: "M4",
@@ -175,12 +175,21 @@ function MaintenancePage() {
             maintenance_type: maintenanceType,
             machine_down: machineDown,
           },
-        })
-        .select("ticket_number")
-        .single();
+        });
 
       if (error) throw error;
-      toast.success("Requisição de manutenção criada!", { description: (data as { ticket_number: string }).ticket_number });
+
+      // SELECT separado para não acionar policy de SELECT durante INSERT
+      const { data: created } = await supabaseBrowser
+        .from("requisitions")
+        .select("ticket_number")
+        .eq("module", "M4")
+        .eq("requester_profile_id", user?.id ?? "")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      toast.success("Requisição de manutenção criada!", { description: created?.ticket_number ?? "" });
       setDialogOpen(false);
       resetForm();
       await loadTickets();

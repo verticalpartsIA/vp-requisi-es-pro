@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect, useCallback, useRef } from "react";
+import { supabaseBrowser } from "@/lib/supabase-browser";
+import { useAuth } from "@/features/auth/auth-context";
 import {
   BarChart3,
   TrendingUp,
@@ -339,6 +341,7 @@ function SLAGauge({ value }: { value: number }) {
  * ──────────────────────────────────────────────── */
 
 function AnalyticsPage() {
+  const { session } = useAuth();
   const [period, setPeriod] = useState("12m");
   const [moduleFilter, setModuleFilter] = useState("Todos");
   const [compareMode, setCompareMode] = useState<"none" | "previous_period" | "same_period_last_year">("none");
@@ -352,6 +355,50 @@ function AnalyticsPage() {
   const [exportIncludeRaw, setExportIncludeRaw] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
   const [exportResult, setExportResult] = useState<{ download_url: string; expires_at: string; file_size_bytes: number; generated_at: string } | null>(null);
+
+  /* ── KPIs reais do banco ── */
+  const [dbKpis, setDbKpis] = useState<{
+    totalTickets: number;
+    approvalRate: number;
+    moduleDistData: typeof moduleDistData;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!session) return;
+    (async () => {
+      const { data: reqs } = await supabaseBrowser
+        .from("requisitions")
+        .select("module,status")
+        .limit(5000);
+      if (!reqs) return;
+
+      const total = reqs.length;
+      const concluded = reqs.filter((r) => r.status === "CONCLUÍDO" || r.status === "COMPRA" || r.status === "RECEBIMENTO").length;
+      const rejected = reqs.filter((r) => r.status === "REJEITADO" || r.status === "CANCELADO").length;
+      const decided = concluded + rejected;
+      const approvalRateReal = decided > 0 ? +(concluded / decided * 100).toFixed(1) : 0;
+
+      const moduleCounts: Record<string, number> = {};
+      for (const r of reqs) {
+        moduleCounts[r.module] = (moduleCounts[r.module] ?? 0) + 1;
+      }
+      const MODULE_META: { key: string; name: string; fill: string }[] = [
+        { key: "M1", name: "Produtos", fill: "#3B82F6" },
+        { key: "M2", name: "Viagens", fill: "#10B981" },
+        { key: "M3", name: "Serviços", fill: "#8B5CF6" },
+        { key: "M4", name: "Manutenção", fill: "#F59E0B" },
+        { key: "M5", name: "Frete", fill: "#EF4444" },
+        { key: "M6", name: "Locação", fill: "#06B6D4" },
+      ];
+      const realModuleDist = MODULE_META.map((m) => ({
+        name: m.name,
+        value: moduleCounts[m.key] ?? 0,
+        fill: m.fill,
+      }));
+
+      setDbKpis({ totalTickets: total, approvalRate: approvalRateReal, moduleDistData: realModuleDist });
+    })();
+  }, [session]);
 
   /* ── Real-time simulation ── */
   const [liveEvents, setLiveEvents] = useState<(WSEvent & { _id: number })[]>([]);
@@ -458,10 +505,12 @@ function AnalyticsPage() {
   const fmtBRL = (v: number) => v >= 1_000_000 ? `R$ ${(v / 1_000_000).toFixed(1)}M` : `R$ ${(v / 1_000).toFixed(0)}K`;
   const fmtBytes = (b: number) => b < 1024 * 1024 ? `${(b / 1024).toFixed(1)} KB` : `${(b / (1024 * 1024)).toFixed(1)} MB`;
 
-  const totalTickets = 1714;
-  const avgCycleHours = 156;
-  const slaCompliance = 87;
-  const approvalRate = 94.2;
+  // KPIs: usa dados reais quando disponíveis, fallback para estimativas históricas
+  const totalTickets = dbKpis?.totalTickets ?? 1714;
+  const avgCycleHours = 156; // calculado futuramente a partir de completed_at
+  const slaCompliance = 87;  // calculado futuramente a partir de SLA targets
+  const approvalRate = dbKpis?.approvalRate ?? 94.2;
+  const liveModuleDist = dbKpis?.moduleDistData ?? moduleDistData;
 
   return (
     <>
@@ -710,7 +759,7 @@ function AnalyticsPage() {
               <PieChart>
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Pie
-                  data={moduleDistData}
+                  data={liveModuleDist}
                   cx="50%"
                   cy="50%"
                   innerRadius={55}
@@ -721,7 +770,7 @@ function AnalyticsPage() {
                   label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                   labelLine={false}
                 >
-                  {moduleDistData.map((entry) => (
+                  {liveModuleDist.map((entry) => (
                     <Cell key={entry.name} fill={entry.fill} />
                   ))}
                 </Pie>

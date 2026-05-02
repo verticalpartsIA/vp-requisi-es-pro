@@ -189,14 +189,14 @@ function TripsPage() {
     return true;
   };
 
-  const handleNext = () => { if (validateStep()) setStep((s) => Math.min(s + 1, STEPS.length - 1)); };
+  const handleNext = () => { if (validateStep()) { toast.dismiss(); setStep((s) => Math.min(s + 1, STEPS.length - 1)); } };
 
   const handleSubmit = async () => {
     if (!validateStep()) return;
     setIsSubmitting(true);
     try {
       const urgency = !isAdvancedNotice ? "URGENT" : durationDays > 7 ? "HIGH" : "MEDIUM";
-      const { data, error } = await supabaseBrowser
+      const { error } = await supabaseBrowser
         .from("requisitions")
         .insert({
           module: "M2",
@@ -224,11 +224,21 @@ function TripsPage() {
             short_notice_justification: shortNoticeJustification || null,
           },
         })
-        .select("ticket_number")
-        .single();
+        );
 
       if (error) throw error;
-      toast.success("Requisição de viagem criada!", { description: (data as { ticket_number: string }).ticket_number });
+
+      // SELECT separado para não acionar policy de SELECT durante INSERT
+      const { data: created } = await supabaseBrowser
+        .from("requisitions")
+        .select("ticket_number")
+        .eq("module", "M2")
+        .eq("requester_profile_id", user?.id ?? "")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      toast.success("Requisição de viagem criada!", { description: created?.ticket_number ?? "" });
       setDialogOpen(false);
       resetForm();
       await loadTickets();
@@ -320,7 +330,7 @@ function TripsPage() {
                         // Se retorno já escolhido e ficou antes da nova partida, limpa
                         if (returnDate && d && returnDate < d) setReturnDate(undefined);
                       }}
-                        disabled={(d) => d < new Date()} initialFocus className="p-3 pointer-events-auto" />
+                        disabled={(d) => d < new Date()} initialFocus className="p-3 pointer-events-auto" locale={ptBR} />
                     </PopoverContent>
                   </Popover>
                 </div>
@@ -336,7 +346,7 @@ function TripsPage() {
                     <PopoverContent className="w-auto p-0" align="start">
                       {/* Permite mesmo dia de retorno (ida e volta) */}
                       <Calendar mode="single" selected={returnDate} onSelect={setReturnDate}
-                        disabled={(d) => d < (departureDate ?? new Date())} initialFocus className="p-3 pointer-events-auto" />
+                        disabled={(d) => d < (departureDate ?? new Date())} initialFocus className="p-3 pointer-events-auto" locale={ptBR} />
                     </PopoverContent>
                   </Popover>
                 </div>

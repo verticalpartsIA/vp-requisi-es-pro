@@ -170,13 +170,13 @@ function FreightPage() {
     return true;
   };
 
-  const handleNext = () => { if (validateStep()) setStep((s) => Math.min(s + 1, STEPS.length - 1)); };
+  const handleNext = () => { if (validateStep()) { toast.dismiss(); setStep((s) => Math.min(s + 1, STEPS.length - 1)); } };
 
   const handleSubmit = async () => {
     if (!validateStep()) return;
     setIsSubmitting(true);
     try {
-      const { data, error } = await supabaseBrowser
+      const { error } = await supabaseBrowser
         .from("requisitions")
         .insert({
           module: "M5",
@@ -199,12 +199,21 @@ function FreightPage() {
             declared_value: declaredValue ? parseFloat(declaredValue.replace(",", ".")) : null,
             insurance_cost: insuranceCost || null,
           },
-        })
-        .select("ticket_number")
-        .single();
+        });
 
       if (error) throw error;
-      toast.success("Requisição de frete criada!", { description: (data as { ticket_number: string }).ticket_number });
+
+      // SELECT separado para não acionar policy de SELECT durante INSERT
+      const { data: created } = await supabaseBrowser
+        .from("requisitions")
+        .select("ticket_number")
+        .eq("module", "M5")
+        .eq("requester_profile_id", user?.id ?? "")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      toast.success("Requisição de frete criada!", { description: created?.ticket_number ?? "" });
       setDialogOpen(false);
       resetForm();
       await loadTickets();
@@ -353,7 +362,7 @@ function FreightPage() {
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0" align="start">
                     <Calendar mode="single" selected={pickupDate} onSelect={setPickupDate}
-                      disabled={(d) => d < addDays(new Date(), 1)} initialFocus className="p-3 pointer-events-auto" />
+                      disabled={(d) => d < addDays(new Date(), 1)} initialFocus className="p-3 pointer-events-auto" locale={ptBR} />
                   </PopoverContent>
                 </Popover>
               </div>

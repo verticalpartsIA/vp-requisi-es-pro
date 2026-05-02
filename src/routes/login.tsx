@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/features/auth/auth-context";
+import { friendlySupabaseError } from "@/lib/supabase-error";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/login")({
@@ -48,7 +49,7 @@ function LoginPage() {
       toast.success("Acesso liberado com sucesso.");
       void navigate({ to: redirect || "/" });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Não foi possível entrar agora.");
+      toast.error(friendlySupabaseError(error));
     } finally {
       setIsSubmitting(false);
     }

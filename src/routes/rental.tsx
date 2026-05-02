@@ -171,13 +171,13 @@ function RentalPage() {
     return true;
   };
 
-  const handleNext = () => { if (validateStep()) setStep((s) => Math.min(s + 1, STEPS.length - 1)); };
+  const handleNext = () => { if (validateStep()) { toast.dismiss(); setStep((s) => Math.min(s + 1, STEPS.length - 1)); } };
 
   const handleSubmit = async () => {
     if (!validateStep()) return;
     setIsSubmitting(true);
     try {
-      const { data, error } = await supabaseBrowser
+      const { error } = await supabaseBrowser
         .from("requisitions")
         .insert({
           module: "M6",
@@ -201,12 +201,21 @@ function RentalPage() {
             delivery_location: deliveryLocation,
             long_rental: isLongRental,
           },
-        })
-        .select("ticket_number")
-        .single();
+        });
 
       if (error) throw error;
-      toast.success("Requisição de locação criada!", { description: (data as { ticket_number: string }).ticket_number });
+
+      // SELECT separado para não acionar policy de SELECT durante INSERT
+      const { data: created } = await supabaseBrowser
+        .from("requisitions")
+        .select("ticket_number")
+        .eq("module", "M6")
+        .eq("requester_profile_id", user?.id ?? "")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      toast.success("Requisição de locação criada!", { description: created?.ticket_number ?? "" });
       setDialogOpen(false);
       resetForm();
       await loadTickets();
@@ -306,7 +315,7 @@ function RentalPage() {
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
                       <Calendar mode="single" selected={startDate} onSelect={setStartDate}
-                        disabled={(d) => d < new Date()} initialFocus className="p-3 pointer-events-auto" />
+                        disabled={(d) => d < new Date()} initialFocus className="p-3 pointer-events-auto" locale={ptBR} />
                     </PopoverContent>
                   </Popover>
                 </div>
@@ -321,7 +330,7 @@ function RentalPage() {
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
                       <Calendar mode="single" selected={endDate} onSelect={setEndDate}
-                        disabled={(d) => d < (startDate || new Date())} initialFocus className="p-3 pointer-events-auto" />
+                        disabled={(d) => d < (startDate || new Date())} initialFocus className="p-3 pointer-events-auto" locale={ptBR} />
                     </PopoverContent>
                   </Popover>
                 </div>
