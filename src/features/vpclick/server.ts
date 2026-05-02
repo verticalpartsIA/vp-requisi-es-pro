@@ -15,7 +15,7 @@ import { z } from "zod";
 
 function vpclickUrl() { return process.env.VPCLICK_URL ?? "https://sfpnjwllcmentoocylow.supabase.co"; }
 function vpclickKey() { return process.env.VPCLICK_SERVICE_KEY ?? ""; }
-function vpclickListId() { return process.env.VPCLICK_LIST_ID ?? "b5978b87-ad8f-402f-b46f-6f15f99406fc"; }
+function vpclickListId() { return process.env.VPCLICK_LIST_ID ?? "f20b0470-efe0-450d-ae2e-1d941564a006"; }
 function vpreqBaseUrl() { return process.env.VPREQ_BASE_URL ?? "https://maroon-dove-178367.hostingersite.com"; }
 function vpreqUrl() { return process.env.VITE_SUPABASE_URL ?? "https://vvgcrhtmzvssfdazkkzk.supabase.co"; }
 function vpreqKey() { return process.env.SUPABASE_SERVICE_ROLE_KEY ?? ""; }
