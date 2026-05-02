@@ -1,6 +1,7 @@
 import { supabaseBrowser } from "@/lib/supabase-browser";
 import type { QuotationQueueItem, SupplierEntry } from "@/features/quotations/api";
 import { getApprovalLevelForValue } from "@/lib/approval";
+import { friendlySupabaseError } from "@/lib/supabase-error";
 
 type WinCriteria = "price" | "deadline" | "price_deadline";
 type QuotationStatus = "pending" | "quoting" | "awaiting_proposals" | "selecting_winner" | "completed";
@@ -38,7 +39,7 @@ export async function listQuotationQueueClient() {
         .select("id,quotation_id,supplier_name,price,deadline,notes,proposal_received,is_winner")
         .in("quotation_id", quotationIds);
 
-  if (suppliersError) throw suppliersError;
+  if (suppliersError) throw new Error(friendlySupabaseError(suppliersError));
 
   const quotationByRequisition = new Map((quotations || []).map((quotation) => [quotation.requisition_id, quotation]));
   const suppliersByQuotation = new Map<string, Array<typeof suppliers extends Array<infer T> ? T : never>>();
@@ -83,14 +84,14 @@ async function ensureQuotation(requisitionId: string, status: QuotationStatus) {
     .eq("requisition_id", requisitionId)
     .maybeSingle();
 
-  if (existingError) throw existingError;
+  if (existingError) throw new Error(friendlySupabaseError(existingError));
 
   if (existing?.id) {
     const patch: Record<string, unknown> = { status };
     if (existing.status === "pending") patch.started_at = new Date().toISOString();
 
     const { error } = await supabaseBrowser.from("quotations").update(patch).eq("id", existing.id);
-    if (error) throw error;
+    if (error) throw new Error(friendlySupabaseError(error));
     return existing.id;
   }
 
@@ -102,7 +103,7 @@ async function ensureQuotation(requisitionId: string, status: QuotationStatus) {
       started_at: new Date().toISOString(),
     });
 
-  if (error) throw error;
+  if (error) throw new Error(friendlySupabaseError(error));
 
   // SELECT separado para não depender da policy de SELECT durante o INSERT
   const { data: created, error: fetchError } = await supabaseBrowser
@@ -113,7 +114,7 @@ async function ensureQuotation(requisitionId: string, status: QuotationStatus) {
     .limit(1)
     .maybeSingle();
 
-  if (fetchError) throw fetchError;
+  if (fetchError) throw new Error(friendlySupabaseError(fetchError));
   return created!.id;
 }
 
@@ -123,7 +124,7 @@ async function syncSuppliers(quotationId: string, suppliers: SupplierEntry[]) {
     .select("id")
     .eq("quotation_id", quotationId);
 
-  if (existingError) throw existingError;
+  if (existingError) throw new Error(friendlySupabaseError(existingError));
 
   const existingIds = new Set((existing || []).map((item) => item.id));
   const incomingIds = new Set(suppliers.map((supplier) => supplier.id).filter(Boolean) as string[]);
@@ -131,7 +132,7 @@ async function syncSuppliers(quotationId: string, suppliers: SupplierEntry[]) {
 
   if (idsToDelete.length > 0) {
     const { error } = await supabaseBrowser.from("quotation_suppliers").delete().in("id", idsToDelete);
-    if (error) throw error;
+    if (error) throw new Error(friendlySupabaseError(error));
   }
 
   const payload = suppliers.map((supplier) => ({
@@ -145,12 +146,20 @@ async function syncSuppliers(quotationId: string, suppliers: SupplierEntry[]) {
     is_winner: supplier.isWinner ?? false,
   }));
 
-  const { data, error } = await supabaseBrowser
+  // Upsert sem SELECT para não depender de policy de SELECT encadeada
+  const { error: upsertError } = await supabaseBrowser
     .from("quotation_suppliers")
-    .upsert(payload)
-    .select("id,supplier_name,price,deadline,notes,proposal_received,is_winner");
+    .upsert(payload);
 
-  if (error) throw error;
+  if (upsertError) throw new Error(friendlySupabaseError(upsertError));
+
+  // SELECT separado para buscar os fornecedores salvos com seus IDs
+  const { data, error: fetchError } = await supabaseBrowser
+    .from("quotation_suppliers")
+    .select("id,supplier_name,price,deadline,notes,proposal_received,is_winner")
+    .eq("quotation_id", quotationId);
+
+  if (fetchError) throw new Error(friendlySupabaseError(fetchError));
   return data || [];
 }
 
@@ -163,13 +172,13 @@ export async function saveQuotationSuppliersClient(requisitionId: string, suppli
     .select("id,ticket_number")
     .eq("id", requisitionId)
     .single();
-  if (requisitionError) throw requisitionError;
+  if (requisitionError) throw new Error(friendlySupabaseError(requisitionError));
 
   const { error: requisitionUpdateError } = await supabaseBrowser
     .from("requisitions")
     .update({ status: "COTAÇÃO" })
     .eq("id", requisitionId);
-  if (requisitionUpdateError) throw requisitionUpdateError;
+  if (requisitionUpdateError) throw new Error(friendlySupabaseError(requisitionUpdateError));
 
   const { error: logError } = await supabaseBrowser.from("audit_logs").insert({
     requisition_id: requisitionId,
@@ -229,7 +238,7 @@ export async function finalizeQuotationClient(
     .from("quotation_suppliers")
     .select("id,supplier_name,price")
     .eq("quotation_id", quotationId);
-  if (suppliersError) throw suppliersError;
+  if (suppliersError) throw new Error(friendlySupabaseError(suppliersError));
 
   const winner = (suppliers || []).find((supplier) => supplier.id === supplierId);
   if (!winner || winner.price === null) {
@@ -240,13 +249,13 @@ export async function finalizeQuotationClient(
     .from("quotation_suppliers")
     .update({ is_winner: false })
     .eq("quotation_id", quotationId);
-  if (resetError) throw resetError;
+  if (resetError) throw new Error(friendlySupabaseError(resetError));
 
   const { error: winnerError } = await supabaseBrowser
     .from("quotation_suppliers")
     .update({ is_winner: true })
     .eq("id", supplierId);
-  if (winnerError) throw winnerError;
+  if (winnerError) throw new Error(friendlySupabaseError(winnerError));
 
   const { error: quotationError } = await supabaseBrowser
     .from("quotations")
@@ -257,20 +266,20 @@ export async function finalizeQuotationClient(
       completed_at: new Date().toISOString(),
     })
     .eq("id", quotationId);
-  if (quotationError) throw quotationError;
+  if (quotationError) throw new Error(friendlySupabaseError(quotationError));
 
   const { data: requisition, error: requisitionError } = await supabaseBrowser
     .from("requisitions")
     .select("ticket_number,status")
     .eq("id", requisitionId)
     .single();
-  if (requisitionError) throw requisitionError;
+  if (requisitionError) throw new Error(friendlySupabaseError(requisitionError));
 
   const { error: requisitionUpdateError } = await supabaseBrowser
     .from("requisitions")
     .update({ status: "APROVAÇÃO" })
     .eq("id", requisitionId);
-  if (requisitionUpdateError) throw requisitionUpdateError;
+  if (requisitionUpdateError) throw new Error(friendlySupabaseError(requisitionUpdateError));
 
   const { error: approvalError } = await supabaseBrowser
     .from("approvals")
@@ -282,7 +291,7 @@ export async function finalizeQuotationClient(
       decision: "pending",
     })
     .select("id");
-  if (approvalError) throw approvalError;
+  if (approvalError) throw new Error(friendlySupabaseError(approvalError));
 
   const { error: firstLogError } = await supabaseBrowser.from("audit_logs").insert({
     requisition_id: requisitionId,
