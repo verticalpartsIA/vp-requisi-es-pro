@@ -806,15 +806,64 @@ function LogsPage() {
   const handleExport = async () => {
     if (!exportTicketId) return;
     setExportLoading(true);
-    // Simulate API call
-    await new Promise((r) => setTimeout(r, 1500));
+
     const now = new Date();
-    const expires = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-    const ext = exportFormat === "PDF" ? "pdf" : exportFormat === "CSV" ? "csv" : "json";
+    const ticketEntries = auditEntriesLive.filter((e) => e.ticket_id === exportTicketId);
+
+    let content: string;
+    let mimeType: string;
+    let ext: string;
+
+    if (exportFormat === "JSON") {
+      ext = "json";
+      mimeType = "application/json;charset=utf-8";
+      const rows = ticketEntries.map((e) => ({
+        ticket: e.ticket_id,
+        modulo: e.module,
+        etapa: e.module_stage,
+        acao: e.action_type,
+        descricao: e.action_description,
+        responsavel: e.user_name,
+        data: e.created_at,
+      }));
+      content = JSON.stringify({ ticket: exportTicketId, exportado_em: now.toISOString(), eventos: rows }, null, 2);
+    } else if (exportFormat === "CSV") {
+      ext = "csv";
+      mimeType = "text/csv;charset=utf-8";
+      const header = "Ticket;Modulo;Etapa;Acao;Descricao;Responsavel;Data\n";
+      const rows = ticketEntries.map((e) =>
+        `${e.ticket_id};${e.module};${e.module_stage};${e.action_type};${e.action_description};${e.user_name};${e.created_at}`
+      ).join("\n");
+      content = header + rows;
+    } else {
+      // PDF → exporta como texto formatado (sem dependência de lib PDF)
+      ext = "txt";
+      mimeType = "text/plain;charset=utf-8";
+      const lines = [
+        `HISTÓRICO DE AUDITORIA — ${exportTicketId}`,
+        `Exportado em: ${now.toLocaleString("pt-BR")}`,
+        "─".repeat(60),
+        ...ticketEntries.map((e) =>
+          `[${e.created_at}] ${e.module_stage} | ${e.action_description} | ${e.user_name}`
+        ),
+      ];
+      content = lines.join("\n");
+    }
+
+    const blob = new Blob(["﻿" + content], { type: mimeType });
+    const blobUrl = URL.createObjectURL(blob);
+    const filename = `auditoria-${exportTicketId}-${now.toISOString().slice(0, 10)}.${ext}`;
+
+    const anchor = document.createElement("a");
+    anchor.href = blobUrl;
+    anchor.download = filename;
+    anchor.click();
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 30_000);
+
     setExportResult({
-      download_url: `https://storage.vprequisicoes.com/exports/audit-${exportTicketId}.${ext}`,
-      expires_at: expires.toISOString(),
-      file_size_bytes: Math.floor(Math.random() * 300000) + 50000,
+      download_url: blobUrl,
+      expires_at: new Date(now.getTime() + 30 * 60 * 1000).toISOString(),
+      file_size_bytes: blob.size,
       generated_at: now.toISOString(),
     });
     setExportLoading(false);
@@ -1761,11 +1810,17 @@ function LogsPage() {
               </Card>
 
               <div className="flex gap-2">
-                <Button className="flex-1 gap-2" asChild>
-                  <a href={exportResult.download_url} target="_blank" rel="noopener noreferrer">
-                    <ExternalLink className="h-4 w-4" />
-                    Baixar Arquivo
-                  </a>
+                <Button
+                  className="flex-1 gap-2"
+                  onClick={() => {
+                    const a = document.createElement("a");
+                    a.href = exportResult.download_url;
+                    a.download = `auditoria-${exportTicketId}.${exportFormat === "JSON" ? "json" : exportFormat === "CSV" ? "csv" : "txt"}`;
+                    a.click();
+                  }}
+                >
+                  <FileDown className="h-4 w-4" />
+                  Baixar Arquivo
                 </Button>
                 <Button
                   variant="outline"

@@ -199,6 +199,8 @@ function QuotingPage() {
           : current
       ));
       setPhase("winner");
+      // Auto-seleciona vencedor quando há apenas 1 fornecedor (caso mais comum)
+      if (result.suppliers.length === 1) setWinnerIndex(0);
       setQueue(await listQuotationQueueClient());
       await router.invalidate();
       toast.success("Propostas registradas com sucesso.");
@@ -439,7 +441,9 @@ function QuotingPage() {
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          {winnerIndex === index && <Trophy className="h-5 w-5 text-vp-yellow-dark" />}
+                          {winnerIndex === index
+                            ? <Trophy className="h-5 w-5 text-vp-yellow-dark shrink-0" />
+                            : <div className="h-5 w-5 rounded-full border-2 border-muted-foreground/40 shrink-0" />}
                           <div>
                             <p className="font-semibold text-sm text-foreground">{supplier.name}</p>
                             <div className="flex gap-4 mt-1 text-xs text-muted-foreground">
@@ -449,9 +453,9 @@ function QuotingPage() {
                             {supplier.notes && <p className="text-xs text-muted-foreground mt-1">{supplier.notes}</p>}
                           </div>
                         </div>
-                        {winnerIndex === index && (
-                          <Badge className="bg-vp-yellow text-vp-dark border-vp-yellow-dark">Vencedor</Badge>
-                        )}
+                        {winnerIndex === index
+                          ? <Badge className="bg-vp-yellow text-vp-dark border-vp-yellow-dark">Vencedor ✓</Badge>
+                          : <Badge variant="outline" className="text-muted-foreground text-xs">Selecionar</Badge>}
                       </div>
                     </CardContent>
                   </Card>
