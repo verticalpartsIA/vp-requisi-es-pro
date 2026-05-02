@@ -19,6 +19,7 @@ import {
 import { TicketsTable } from "@/components/tickets-table";
 import { toast } from "sonner";
 import { createProductRequisitionClient, listProductRequisitionsClient } from "@/features/requisitions/client";
+import { friendlySupabaseError } from "@/lib/supabase-error";
 import { useAuth } from "@/features/auth/auth-context";
 import type { TicketRow } from "@/components/tickets-table";
 

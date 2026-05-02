@@ -1,4 +1,5 @@
 import { supabaseBrowser } from "@/lib/supabase-browser";
+import { friendlySupabaseError } from "@/lib/supabase-error";
 import type { TicketRow } from "@/components/tickets-table";
 
 interface ProductRequisitionInput {
@@ -75,7 +76,7 @@ export async function createProductRequisitionClient(input: ProductRequisitionIn
     .select("id,ticket_number,status")
     .single();
 
-  if (error) throw error;
+  if (error) throw new Error(friendlySupabaseError(error));
 
   const { error: logError } = await supabaseBrowser
     .from("audit_logs")
@@ -89,7 +90,7 @@ export async function createProductRequisitionClient(input: ProductRequisitionIn
       },
     });
 
-  if (logError) throw logError;
+  if (logError) throw new Error(friendlySupabaseError(logError));
 
   return {
     id: data.id,

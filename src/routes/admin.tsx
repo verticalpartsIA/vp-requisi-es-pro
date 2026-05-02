@@ -37,6 +37,12 @@ import {
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/admin")({
+  head: () => ({
+    meta: [
+      { title: "Admin — VPRequisições" },
+      { name: "description", content: "Gestão de usuários, papéis e faixas de aprovação" },
+    ],
+  }),
   component: AdminPage,
 });
 

@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { TicketsTable, type TicketRow } from "@/components/tickets-table";
 import { supabaseBrowser } from "@/lib/supabase-browser";
+import { friendlySupabaseError } from "@/lib/supabase-error";
 import { useAuth } from "@/features/auth/auth-context";
 import { toast } from "sonner";
 
@@ -208,8 +209,7 @@ function FreightPage() {
       resetForm();
       await loadTickets();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : (err as { message?: string })?.message ?? "Não foi possível criar a requisição agora.";
-      toast.error(msg);
+      toast.error(friendlySupabaseError(err));
     } finally {
       setIsSubmitting(false);
     }
