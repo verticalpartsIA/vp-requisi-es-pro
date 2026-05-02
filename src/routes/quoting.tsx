@@ -25,6 +25,7 @@ import {
 } from "@/features/quotations/api";
 import { toast } from "sonner";
 import { AccessGuard } from "@/components/access-guard";
+import { notifyVpClickClient } from "@/features/vpclick/client";
 import {
   finalizeQuotationClient,
   listQuotationQueueClient,
@@ -232,6 +233,14 @@ function QuotingPage() {
       );
 
       toast.success("Cotação finalizada e enviada para aprovação.");
+      void notifyVpClickClient({
+        stage: "V2",
+        requisitionId: selectedItem.requisitionId,
+        ticketNumber: selectedItem.ticketNumber,
+        title: selectedItem.title,
+        module: selectedItem.module,
+        requesterName: "",
+      }).catch(console.warn);
       closeDialog();
       setQueue(await listQuotationQueueClient());
       await router.invalidate();

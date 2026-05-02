@@ -36,6 +36,7 @@ import { toast } from "sonner";
 import { AccessGuard } from "@/components/access-guard";
 import { confirmPurchaseClient, listPendingPurchasesClient } from "@/features/purchases/client";
 import { useAuth } from "@/features/auth/auth-context";
+import { notifyVpClickClient } from "@/features/vpclick/client";
 
 export const Route = createFileRoute("/purchasing")({
   head: () => ({
@@ -204,6 +205,15 @@ function PurchasingPage() {
           ? "Compra finalizada e encaminhada para recebimento (V5)."
           : "Compra finalizada com sucesso.",
       );
+      void notifyVpClickClient({
+        stage: "V4",
+        requisitionId: selected.requisitionId,
+        ticketNumber: selected.id,
+        title: selected.title,
+        module: selected.module,
+        requesterName: selected.requesterName,
+        requiresReceipt: sendToV5,
+      }).catch(console.warn);
       closeDialog();
       setItems(await listPendingPurchasesClient());
       await router.invalidate();

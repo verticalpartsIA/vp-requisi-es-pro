@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { createProductRequisitionClient, listProductRequisitionsClient } from "@/features/requisitions/client";
 import { friendlySupabaseError } from "@/lib/supabase-error";
 import { useAuth } from "@/features/auth/auth-context";
+import { notifyVpClickClient } from "@/features/vpclick/client";
 import type { TicketRow } from "@/components/tickets-table";
 
 const URGENCY = [
@@ -180,6 +181,14 @@ function ProductsPage() {
       toast.success("Requisição criada com sucesso!", {
         description: `${result.ticketNumber} — ${productName}`,
       });
+      void notifyVpClickClient({
+        stage: "V1",
+        requisitionId: result.id,
+        ticketNumber: result.ticketNumber,
+        title: productName,
+        module: "M1",
+        requesterName: profile?.full_name || user?.email || "Usuário VP",
+      }).catch(console.warn);
       setDialogOpen(false);
       resetForm();
       setTickets(await listProductRequisitionsClient());

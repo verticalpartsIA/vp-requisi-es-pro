@@ -19,6 +19,7 @@ import { supabaseBrowser } from "@/lib/supabase-browser";
 import { friendlySupabaseError } from "@/lib/supabase-error";
 import { useAuth } from "@/features/auth/auth-context";
 import { toast } from "sonner";
+import { notifyVpClickClient } from "@/features/vpclick/client";
 
 const MAINTENANCE_TYPES = [
   { value: "CORRETIVA", label: "Corretiva" },
@@ -182,7 +183,7 @@ function MaintenancePage() {
       // SELECT separado para não acionar policy de SELECT durante INSERT
       const { data: created } = await supabaseBrowser
         .from("requisitions")
-        .select("ticket_number")
+        .select("id,ticket_number")
         .eq("module", "M4")
         .eq("requester_profile_id", user?.id ?? "")
         .order("created_at", { ascending: false })
@@ -190,6 +191,14 @@ function MaintenancePage() {
         .maybeSingle();
 
       toast.success("Requisição de manutenção criada!", { description: created?.ticket_number ?? "" });
+      void notifyVpClickClient({
+        stage: "V1",
+        requisitionId: created?.id ?? "",
+        ticketNumber: created?.ticket_number ?? "",
+        title: `${equipmentName} — ${maintenanceType}`,
+        module: "M4",
+        requesterName: profile?.full_name || user?.email || "Usuário VP",
+      }).catch(console.warn);
       setDialogOpen(false);
       resetForm();
       await loadTickets();

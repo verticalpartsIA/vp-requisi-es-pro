@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { AccessGuard } from "@/components/access-guard";
 import { listPendingReceiptsClient, registerReceiptClient } from "@/features/receipts/client";
 import { useAuth } from "@/features/auth/auth-context";
+import { notifyVpClickClient } from "@/features/vpclick/client";
 
 export const Route = createFileRoute("/receipt")({
   head: () => ({
@@ -85,6 +86,14 @@ function ReceiptPage() {
         notes,
       });
 
+      void notifyVpClickClient({
+        stage: "V5",
+        requisitionId: selectedItem.requisitionId,
+        ticketNumber: selectedItem.id,
+        title: selectedItem.description,
+        module: selectedItem.category,
+        requesterName: selectedItem.requester,
+      }).catch(console.warn);
       closeDialog();
       setPendingItems(await listPendingReceiptsClient());
       await router.invalidate();

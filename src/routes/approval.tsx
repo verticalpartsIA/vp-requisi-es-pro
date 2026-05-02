@@ -22,6 +22,7 @@ import {
   rejectRequisitionClient,
 } from "@/features/approvals/client";
 import { useAuth } from "@/features/auth/auth-context";
+import { notifyVpClickClient } from "@/features/vpclick/client";
 import { APPROVAL_LEVEL_LABELS, APPROVAL_LEVEL_SHORT_LABELS } from "@/lib/approval";
 
 export const Route = createFileRoute("/approval")({
@@ -73,6 +74,14 @@ function ApprovalPage() {
     try {
       await approveRequisitionClient(selected.approvalId, selected.requisitionId, justification);
       toast.success("Requisição aprovada e enviada para compra.");
+      void notifyVpClickClient({
+        stage: "V3_approved",
+        requisitionId: selected.requisitionId,
+        ticketNumber: selected.id,
+        title: selected.title,
+        module: selected.module,
+        requesterName: selected.requesterName,
+      }).catch(console.warn);
       setSelected(null);
       setJustification("");
       setApprovals(await listPendingApprovalsClient());
@@ -97,6 +106,14 @@ function ApprovalPage() {
     try {
       await rejectRequisitionClient(selected.approvalId, selected.requisitionId, justification);
       toast.success("Requisição reprovada com sucesso.");
+      void notifyVpClickClient({
+        stage: "V3_rejected",
+        requisitionId: selected.requisitionId,
+        ticketNumber: selected.id,
+        title: selected.title,
+        module: selected.module,
+        requesterName: selected.requesterName,
+      }).catch(console.warn);
       setSelected(null);
       setJustification("");
       setApprovals(await listPendingApprovalsClient());

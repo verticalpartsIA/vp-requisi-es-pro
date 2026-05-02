@@ -22,6 +22,7 @@ import { supabaseBrowser } from "@/lib/supabase-browser";
 import { friendlySupabaseError } from "@/lib/supabase-error";
 import { useAuth } from "@/features/auth/auth-context";
 import { toast } from "sonner";
+import { notifyVpClickClient } from "@/features/vpclick/client";
 
 const SERVICE_TYPES = [
   { value: "CONSULTORIA", label: "Consultoria" },
@@ -227,7 +228,7 @@ function ServicesPage() {
       // SELECT separado para não acionar policy de SELECT durante INSERT
       const { data: created } = await supabaseBrowser
         .from("requisitions")
-        .select("ticket_number")
+        .select("id,ticket_number")
         .eq("module", "M3")
         .eq("requester_profile_id", user?.id ?? "")
         .order("created_at", { ascending: false })
@@ -235,6 +236,14 @@ function ServicesPage() {
         .maybeSingle();
 
       toast.success("Requisição de serviço criada!", { description: created?.ticket_number ?? "" });
+      void notifyVpClickClient({
+        stage: "V1",
+        requisitionId: created?.id ?? "",
+        ticketNumber: created?.ticket_number ?? "",
+        title: `${serviceName} (${SERVICE_TYPES.find((t) => t.value === serviceType)?.label ?? serviceType})`,
+        module: "M3",
+        requesterName: profile?.full_name || user?.email || "Usuário VP",
+      }).catch(console.warn);
       setDialogOpen(false);
       resetForm();
       await loadTickets();
