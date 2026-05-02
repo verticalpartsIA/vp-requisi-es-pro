@@ -106,7 +106,7 @@ export async function registerReceiptClient(input: {
       notes: input.notes || null,
     },
   });
-  if (logError) throw logError;
+  if (logError) console.warn("[audit_logs] failed:", logError.message);
 
   return {
     condition: input.condition,

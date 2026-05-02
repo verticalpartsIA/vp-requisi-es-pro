@@ -158,5 +158,5 @@ export async function confirmPurchaseClient(input: {
       requires_receipt: input.requiresReceipt,
     },
   });
-  if (logError) throw logError;
+  if (logError) console.warn("[audit_logs] failed:", logError.message);
 }

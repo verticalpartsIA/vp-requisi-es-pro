@@ -134,7 +134,7 @@ export async function approveRequisitionClient(approvalId: string, requisitionId
     new_status: "COMPRA",
     details: { justification },
   });
-  if (logError) throw logError;
+  if (logError) console.warn("[audit_logs] failed:", logError.message);
 }
 
 export async function rejectRequisitionClient(approvalId: string, requisitionId: string, justification: string) {
@@ -170,5 +170,5 @@ export async function rejectRequisitionClient(approvalId: string, requisitionId:
     new_status: "REJEITADO",
     details: { justification },
   });
-  if (logError) throw logError;
+  if (logError) console.warn("[audit_logs] failed:", logError.message);
 }

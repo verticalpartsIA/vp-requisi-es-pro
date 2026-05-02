@@ -94,18 +94,27 @@ async function ensureQuotation(requisitionId: string, status: QuotationStatus) {
     return existing.id;
   }
 
-  const { data, error } = await supabaseBrowser
+  const { error } = await supabaseBrowser
     .from("quotations")
     .insert({
       requisition_id: requisitionId,
       status,
       started_at: new Date().toISOString(),
-    })
-    .select("id")
-    .single();
+    });
 
   if (error) throw error;
-  return data.id;
+
+  // SELECT separado para não depender da policy de SELECT durante o INSERT
+  const { data: created, error: fetchError } = await supabaseBrowser
+    .from("quotations")
+    .select("id")
+    .eq("requisition_id", requisitionId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (fetchError) throw fetchError;
+  return created!.id;
 }
 
 async function syncSuppliers(quotationId: string, suppliers: SupplierEntry[]) {
@@ -170,7 +179,7 @@ export async function saveQuotationSuppliersClient(requisitionId: string, suppli
     new_status: "COTAÇÃO",
     details: { suppliers_count: suppliers.length },
   });
-  if (logError) throw logError;
+  if (logError) console.warn("[audit_logs] QUOTATION_STARTED failed:", logError.message);
 
   return {
     quotationId,
@@ -289,7 +298,7 @@ export async function finalizeQuotationClient(
       win_criteria: winCriteria,
     },
   });
-  if (firstLogError) throw firstLogError;
+  if (firstLogError) console.warn("[audit_logs] WINNER_SELECTED failed:", firstLogError.message);
 
   const { error: secondLogError } = await supabaseBrowser.from("audit_logs").insert({
     requisition_id: requisitionId,
@@ -302,5 +311,5 @@ export async function finalizeQuotationClient(
       total_value: winner.price,
     },
   });
-  if (secondLogError) throw secondLogError;
+  if (secondLogError) console.warn("[audit_logs] APPROVAL_REQUESTED failed:", secondLogError.message);
 }
