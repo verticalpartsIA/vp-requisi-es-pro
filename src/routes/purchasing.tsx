@@ -15,6 +15,7 @@ import {
   Truck,
   Building2,
   AlertTriangle,
+  XCircle,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -85,6 +86,7 @@ function PurchasingPage() {
   const [paymentMethod, setPaymentMethod] = useState("");
   const [notes, setNotes] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [dialogError, setDialogError] = useState<{ message: string; action: string } | null>(null);
 
   useEffect(() => {
     if (!session) return;
@@ -99,6 +101,7 @@ function PurchasingPage() {
     setInvoiceNumber("");
     setPaymentMethod("");
     setNotes("");
+    setDialogError(null);
   };
 
   const closeDialog = () => {
@@ -109,25 +112,78 @@ function PurchasingPage() {
     setInvoiceNumber("");
     setPaymentMethod("");
     setNotes("");
+    setDialogError(null);
   };
+
+  /** Extrai mensagem legível de qualquer tipo de erro (Error ou PostgrestError) */
+  function extractError(error: unknown): { message: string; action: string } {
+    if (error && typeof error === "object") {
+      const e = error as { message?: string; code?: string; hint?: string };
+      const code = e.code ?? "";
+      const msg = e.message ?? "";
+
+      if (code === "42501" || msg.includes("permission") || msg.includes("policy")) {
+        return {
+          message: "Sem permissão para registrar esta compra.",
+          action: "Verifique se você tem o papel de comprador e que sua sessão não expirou. Tente sair e entrar novamente.",
+        };
+      }
+      if (code === "23505" || msg.includes("unique") || msg.includes("duplicate")) {
+        return {
+          message: "Já existe um registro de compra para esta requisição.",
+          action: "Esta compra já foi finalizada anteriormente. Atualize a página — ela deve ter saído da fila.",
+        };
+      }
+      if (code === "23503" || msg.includes("foreign key")) {
+        return {
+          message: "Referência inválida: aprovação ou requisição não encontrada.",
+          action: "Recarregue a página e tente novamente. Se persistir, contate o administrador.",
+        };
+      }
+      if (msg) {
+        return { message: msg, action: "Corrija o problema e tente novamente." };
+      }
+    }
+    if (error instanceof Error) {
+      return { message: error.message, action: "Corrija o problema e tente novamente." };
+    }
+    return {
+      message: "Erro desconhecido ao finalizar a compra.",
+      action: "Recarregue a página e tente novamente. Se persistir, contate o administrador.",
+    };
+  }
 
   const handleFinalize = async () => {
     if (!selected) return;
+    setDialogError(null);
 
+    // ── Validações antes de chamar o backend ──────────────────────────
     const winner = selected.suppliers.find((supplier) => supplier.isWinner);
-
     if (!winner) {
-      toast.error("Não foi possível identificar o fornecedor vencedor.");
+      setDialogError({
+        message: "Nenhum fornecedor vencedor definido nesta cotação.",
+        action: "Volte à etapa V2 — Cotação, abra este ticket e marque o fornecedor vencedor antes de finalizar a compra.",
+      });
       return;
     }
 
     if (!purchaseOrderNumber.trim()) {
-      toast.error("Informe o número do pedido de compra.");
+      setDialogError({
+        message: "O campo Número do Pedido é obrigatório.",
+        action: "Preencha o número do pedido de compra (ex.: PC-2026-0012) e tente novamente.",
+      });
+      return;
+    }
+
+    if (sendToV5 && !v5Reason.trim()) {
+      setDialogError({
+        message: "Você marcou encaminhar para V5 mas não informou o motivo.",
+        action: "Preencha o campo 'Motivo do encaminhamento' explicando por que a entrega precisa ser conferida.",
+      });
       return;
     }
 
     setIsSaving(true);
-
     try {
       await confirmPurchaseClient({
         requisitionId: selected.requisitionId,
@@ -145,14 +201,14 @@ function PurchasingPage() {
 
       toast.success(
         sendToV5
-          ? "Compra finalizada e encaminhada para recebimento."
+          ? "Compra finalizada e encaminhada para recebimento (V5)."
           : "Compra finalizada com sucesso.",
       );
       closeDialog();
       setItems(await listPendingPurchasesClient());
       await router.invalidate();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Não foi possível finalizar a compra.");
+      setDialogError(extractError(error));
     } finally {
       setIsSaving(false);
     }
@@ -411,12 +467,27 @@ function PurchasingPage() {
                   </div>
                 )}
 
+                {/* Banner de erro acionável — aparece apenas quando há problema */}
+                {dialogError && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 p-3 space-y-1">
+                    <div className="flex items-start gap-2">
+                      <XCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <p className="text-sm font-semibold text-red-700">{dialogError.message}</p>
+                        <p className="text-xs text-red-600">{dialogError.action}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <DialogFooter className="gap-2">
                   <Button variant="ghost" onClick={closeDialog}>
                     Cancelar
                   </Button>
                   <Button variant="vp" onClick={handleFinalize} className="gap-1" disabled={isSaving}>
-                    {sendToV5 ? (
+                    {isSaving ? (
+                      <><ArrowRight className="h-4 w-4 animate-pulse" /> Salvando...</>
+                    ) : sendToV5 ? (
                       <><ArrowRight className="h-4 w-4" /> Finalizar e Encaminhar V5</>
                     ) : (
                       <><CheckCircle2 className="h-4 w-4" /> Finalizar Compra</>

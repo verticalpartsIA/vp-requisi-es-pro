@@ -118,18 +118,21 @@ export async function confirmPurchaseClient(input: {
     .single();
   if (requisitionError) throw requisitionError;
 
-  const { error: purchaseError } = await supabaseBrowser.from("purchases").upsert({
-    requisition_id: input.requisitionId,
-    approval_id: input.approvalId,
-    supplier_name: input.supplierName,
-    supplier_price: input.supplierPrice,
-    purchase_order_number: input.purchaseOrderNumber,
-    invoice_number: input.invoiceNumber || null,
-    payment_method: input.paymentMethod || null,
-    notes: input.notes || null,
-    requires_receipt: input.requiresReceipt,
-    purchased_at: new Date().toISOString(),
-  });
+  const { error: purchaseError } = await supabaseBrowser.from("purchases").upsert(
+    {
+      requisition_id: input.requisitionId,
+      approval_id: input.approvalId,
+      supplier_name: input.supplierName,
+      supplier_price: input.supplierPrice,
+      purchase_order_number: input.purchaseOrderNumber,
+      invoice_number: input.invoiceNumber || null,
+      payment_method: input.paymentMethod || null,
+      notes: input.notes || null,
+      requires_receipt: input.requiresReceipt,
+      purchased_at: new Date().toISOString(),
+    },
+    { onConflict: "requisition_id" },
+  );
   if (purchaseError) throw purchaseError;
 
   const nextStatus = input.requiresReceipt ? "RECEBIMENTO" : "CONCLUÍDO";
