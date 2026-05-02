@@ -48,7 +48,8 @@ export async function listProductRequisitionsClient() {
 }
 
 export async function createProductRequisitionClient(input: ProductRequisitionInput) {
-  const { data, error } = await supabaseBrowser
+  // INSERT sem SELECT para não depender da policy de SELECT (can_view_requisition)
+  const { error } = await supabaseBrowser
     .from("requisitions")
     .insert({
       module: "M1",
@@ -72,29 +73,22 @@ export async function createProductRequisitionClient(input: ProductRequisitionIn
         online_purchase_suggestion: input.onlinePurchaseSuggestion,
         delivery_location: input.deliveryLocation,
       },
-    })
-    .select("id,ticket_number,status")
-    .single();
+    });
 
   if (error) throw new Error(friendlySupabaseError(error));
 
-  const { error: logError } = await supabaseBrowser
-    .from("audit_logs")
-    .insert({
-      requisition_id: data.id,
-      ticket_number: data.ticket_number,
-      action: "REQUISITION_CREATED",
-      new_status: data.status,
-      details: {
-        module: "M1",
-      },
-    });
-
-  // audit_log é secundário — não bloqueia a requisição se falhar
-  if (logError) console.warn("[audit_logs] insert failed:", logError.message);
+  // Busca o ticket recém-criado em query separada
+  const { data: created } = await supabaseBrowser
+    .from("requisitions")
+    .select("id,ticket_number,status")
+    .eq("module", "M1")
+    .eq("requester_profile_id", input.requesterProfileId ?? "")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
   return {
-    id: data.id,
-    ticketNumber: data.ticket_number,
+    id: created?.id ?? "",
+    ticketNumber: created?.ticket_number ?? "",
   };
 }
