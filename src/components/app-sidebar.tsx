@@ -119,19 +119,21 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="p-4">
-        <Link to="/" className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-vp-yellow">
-            <span className="text-sm font-bold text-vp-dark">VP</span>
-          </div>
-          {!collapsed && (
-            <div className="flex flex-col">
-              <span className="text-sm font-bold text-sidebar-foreground">
-                VerticalParts
-              </span>
-              <span className="text-[10px] text-sidebar-primary/60">
-                Requisições
-              </span>
-            </div>
+        <Link to="/" className="flex items-center gap-2">
+          {collapsed ? (
+            /* Ícone redondo quando sidebar recolhida */
+            <img
+              src="/logo-vp.png"
+              alt="VerticalParts"
+              className="h-8 w-8 rounded-full object-cover object-left shrink-0"
+            />
+          ) : (
+            /* Logo completo quando expandido */
+            <img
+              src="/logo-vp.png"
+              alt="VerticalParts"
+              className="h-8 w-auto max-w-[160px] object-contain"
+            />
           )}
         </Link>
       </SidebarHeader>
