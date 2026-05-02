@@ -223,8 +223,7 @@ function TripsPage() {
             purposes,
             short_notice_justification: shortNoticeJustification || null,
           },
-        })
-        );
+        });
 
       if (error) throw error;
 
