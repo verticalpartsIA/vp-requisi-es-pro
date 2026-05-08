@@ -16,7 +16,7 @@ function mapQuotationStatus(requisitionStatus: string, quotationStatus?: Quotati
 export async function listQuotationQueueClient() {
   const { data: requisitions, error: requisitionsError } = await supabaseBrowser
     .from("requisitions")
-    .select("id,ticket_number,module,title,justification,urgency,status")
+    .select("id,ticket_number,module,title,justification,urgency,status,module_data")
     .in("status", ["ABERTO", "COTAÇÃO"])
     .order("created_at", { ascending: true });
 
@@ -50,16 +50,36 @@ export async function listQuotationQueueClient() {
     suppliersByQuotation.set(supplier.quotation_id, current);
   });
 
-  // Fetch travel items for M2 requisitions
-  const m2RequisitionIds = requisitions.filter((r) => r.module === "M2").map((r) => r.id);
+  // Fetch travel items for M2 requisitions (auto-create from module_data if missing)
+  const m2Requisitions = requisitions.filter((r) => r.module === "M2");
+  const m2RequisitionIds = m2Requisitions.map((r) => r.id);
   const travelItemsByRequisition = new Map<string, TravelItem[]>();
 
   if (m2RequisitionIds.length > 0) {
-    const { data: travelItemRows } = await supabaseBrowser
+    const { data: fetchedItems } = await supabaseBrowser
       .from("requisition_items")
       .select("id,requisition_id,item_type,description,status,sort_order")
       .in("requisition_id", m2RequisitionIds)
       .order("sort_order", { ascending: true });
+
+    const travelItemRows = [...(fetchedItems || [])];
+
+    // Auto-heal: requisições M2 criadas antes da migração não têm itens — cria agora
+    const existingReqIds = new Set(travelItemRows.map((r) => r.requisition_id));
+    for (const req of m2Requisitions) {
+      if (existingReqIds.has(req.id)) continue;
+      const md = (req.module_data as Record<string, unknown> | null) ?? {};
+      const toInsert = [
+        { requisition_id: req.id, item_type: 'voo', sort_order: 0 },
+        ...(md.needs_hotel ? [{ requisition_id: req.id, item_type: 'hotel', sort_order: 1 }] : []),
+        ...(md.needs_local_car ? [{ requisition_id: req.id, item_type: 'carro', sort_order: 2 }] : []),
+      ];
+      const { data: inserted } = await supabaseBrowser
+        .from("requisition_items")
+        .insert(toInsert)
+        .select("id,requisition_id,item_type,description,status,sort_order");
+      if (inserted) travelItemRows.push(...inserted);
+    }
 
     // Also fetch quotation_suppliers with item_id for M2
     const m2QuotationIds = (quotations || [])
