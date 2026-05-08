@@ -47,6 +47,7 @@ export const updateRequisition = createServerFn({ method: "POST" })
 
     await supabaseRest("audit_logs", {
       method: "POST",
+      headers: { Prefer: "return=minimal" },
       body: [
         {
           requisition_id: data.requisitionId,
