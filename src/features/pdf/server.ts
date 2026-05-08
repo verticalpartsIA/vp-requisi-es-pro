@@ -1,7 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-const REPORTGEN_KEY = "I4V9GcdvG9KcAZu8n7qw0_cNBUGwKTdPiIfmnYTqao8=";
+function reportgenKey() {
+  return process.env.REPORTGEN_API_KEY ?? "I4V9GcdvG9KcAZu8n7qw0_cNBUGwKTdPiIfmnYTqao8=";
+}
 const REPORTGEN_URL = "https://reportgen.io/api/v1";
 
 function buildHtml(detail: Record<string, unknown>): string {
@@ -257,10 +259,13 @@ export const generateRequisitionPdf = createServerFn({ method: "POST" })
     const detail = JSON.parse(data.detail) as Record<string, unknown>;
     const html = buildHtml(detail);
 
+    const apiKey = reportgenKey();
+    if (!apiKey) throw new Error("REPORTGEN_API_KEY não configurada no servidor.");
+
     const genResp = await fetch(`${REPORTGEN_URL}/generate-pdf-async`, {
       method: "POST",
       headers: {
-        "X-API-Key": REPORTGEN_KEY,
+        "X-API-Key": apiKey,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ html_template: html, engine: "raw" }),
@@ -268,15 +273,20 @@ export const generateRequisitionPdf = createServerFn({ method: "POST" })
 
     if (!genResp.ok) {
       const text = await genResp.text().catch(() => "");
+      if (genResp.status === 401) {
+        throw new Error("reportgen.io: chave de API inválida ou expirada. Verifique REPORTGEN_API_KEY nas variáveis de ambiente.");
+      }
       throw new Error(`reportgen.io error ${genResp.status}: ${text}`);
     }
 
-    const { report_id } = (await genResp.json()) as { report_id: string };
+    const genJson = (await genResp.json()) as { report_id?: string; id?: string };
+    const report_id = genJson.report_id ?? genJson.id ?? "";
+    if (!report_id) throw new Error("reportgen.io não retornou report_id.");
 
     for (let i = 0; i < 20; i++) {
       await new Promise((r) => setTimeout(r, 1500));
       const dlResp = await fetch(`${REPORTGEN_URL}/reports/${report_id}/download`, {
-        headers: { "X-API-Key": REPORTGEN_KEY },
+        headers: { "X-API-Key": apiKey },
       });
       if (dlResp.ok) {
         const buffer = await dlResp.arrayBuffer();
@@ -286,5 +296,5 @@ export const generateRequisitionPdf = createServerFn({ method: "POST" })
       if (dlResp.status !== 404 && dlResp.status !== 202) break;
     }
 
-    throw new Error("PDF generation timed out. Try again in a few seconds.");
+    throw new Error("PDF generation timed out. Tente novamente em alguns segundos.");
   });
