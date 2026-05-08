@@ -64,16 +64,21 @@ export async function listQuotationQueueClient() {
 
     const travelItemRows = [...(fetchedItems || [])];
 
-    // Auto-heal: requisições M2 criadas antes da migração não têm itens — cria agora
-    const existingReqIds = new Set(travelItemRows.map((r) => r.requisition_id));
+    // Auto-heal: cria itens que ainda não existem, comparando tipo a tipo
     for (const req of m2Requisitions) {
-      if (existingReqIds.has(req.id)) continue;
       const md = (req.module_data as Record<string, unknown> | null) ?? {};
-      const toInsert = [
-        { requisition_id: req.id, item_type: 'voo', sort_order: 0 },
-        ...(md.needs_hotel ? [{ requisition_id: req.id, item_type: 'hotel', sort_order: 1 }] : []),
-        ...(md.needs_local_car ? [{ requisition_id: req.id, item_type: 'carro', sort_order: 2 }] : []),
+      const existingTypes = new Set(
+        travelItemRows.filter((r) => r.requisition_id === req.id).map((r) => r.item_type),
+      );
+      const expected: { item_type: string; sort_order: number }[] = [
+        { item_type: 'voo', sort_order: 0 },
+        ...(md.needs_hotel ? [{ item_type: 'hotel', sort_order: 1 }] : []),
+        ...(md.needs_local_car ? [{ item_type: 'carro', sort_order: 2 }] : []),
       ];
+      const toInsert = expected
+        .filter((e) => !existingTypes.has(e.item_type))
+        .map((e) => ({ requisition_id: req.id, ...e }));
+      if (toInsert.length === 0) continue;
       const { data: inserted } = await supabaseBrowser
         .from("requisition_items")
         .insert(toInsert)
