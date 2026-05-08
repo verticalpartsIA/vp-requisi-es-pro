@@ -794,6 +794,23 @@ const MODULE_LABELS: Record<string, string> = {
   M4: "Manutenção", M5: "Frete", M6: "Locação",
 };
 
+function StoragePhoto({ path, bucket = "travel-docs", alt }: { path: string; bucket?: string; alt: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!path) return;
+    supabaseBrowser.storage.from(bucket).createSignedUrl(path, 3600).then(({ data }) => {
+      if (data?.signedUrl) setUrl(data.signedUrl);
+    });
+  }, [path, bucket]);
+  if (!url) return null;
+  return (
+    <div className="col-span-2 mt-1">
+      <p className="text-[10px] text-muted-foreground mb-1">{alt}</p>
+      <img src={url} alt={alt} className="max-w-full max-h-48 rounded-md border border-border object-contain" />
+    </div>
+  );
+}
+
 function ModuleDataSection({ module, data }: { module: string; data: Record<string, unknown> }) {
   const f = (v: unknown) => (v != null && v !== "" ? String(v) : "—");
 
@@ -806,6 +823,29 @@ function ModuleDataSection({ module, data }: { module: string; data: Record<stri
     if (data.brand_preference) rows.push({ label: "Marca Preferida", value: f(data.brand_preference) });
     if (data.model_reference) rows.push({ label: "Ref. Modelo", value: f(data.model_reference) });
     if (data.online_purchase_suggestion) rows.push({ label: "Sugestão Online", value: f(data.online_purchase_suggestion), full: true });
+    return (
+      <div className="space-y-2">
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+          <span className="inline-flex items-center justify-center h-4 w-4 rounded-full bg-gray-100 text-gray-600 text-[9px] font-bold">M</span>
+          {MODULE_LABELS[module] ?? module} — Dados do Formulário
+        </h3>
+        <Card>
+          <CardContent className="p-3">
+            <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-[11px]">
+              {rows.map((r) => (
+                <div key={r.label} className={r.full ? "col-span-2" : ""}>
+                  <p className="text-[10px] text-muted-foreground">{r.label}</p>
+                  <p className="font-medium text-foreground break-words">{r.value}</p>
+                </div>
+              ))}
+              {typeof data.photo_path === "string" && data.photo_path && (
+                <StoragePhoto path={data.photo_path} alt="Foto do Produto" />
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
   } else if (module === "M2") {
     const travelers = data.travelers as Array<Record<string, unknown>> | undefined;
     if (travelers?.length) {
@@ -816,14 +856,22 @@ function ModuleDataSection({ module, data }: { module: string; data: Record<stri
             {MODULE_LABELS[module]} — {travelers.length} viajante{travelers.length !== 1 ? "s" : ""}
           </h3>
           <div className="space-y-2">
-            {travelers.map((t, i) => (
-              <Card key={i}>
-                <CardContent className="p-3">
-                  <p className="text-xs font-semibold text-foreground">{i + 1}. {f(t.fullName)}</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">{f(t.docType)}: {f(t.docNumber)}</p>
-                </CardContent>
-              </Card>
-            ))}
+            {travelers.map((t, i) => {
+              const photoPath = (t.docPhotoPath ?? t.doc_photo_path) as string | undefined;
+              return (
+                <Card key={i}>
+                  <CardContent className="p-3">
+                    <p className="text-xs font-semibold text-foreground">{i + 1}. {f(t.fullName)}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">{f(t.docType)}: {f(t.docNumber)}</p>
+                    {photoPath && (
+                      <div className="mt-2">
+                        <StoragePhoto path={photoPath} alt={`Documento — ${f(t.fullName)}`} />
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         </div>
       );
@@ -833,7 +881,31 @@ function ModuleDataSection({ module, data }: { module: string; data: Record<stri
     if (data.cargo_description) rows.push({ label: "Descrição da Carga", value: f(data.cargo_description), full: true });
     if (data.unloading_location) rows.push({ label: "Local de Descarregamento", value: f(data.unloading_location), full: true });
     if (data.cargo_photo_description) rows.push({ label: "Obs. da Foto", value: f(data.cargo_photo_description), full: true });
-  } else if (module === "M6") {
+    return (
+      <div className="space-y-2">
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+          <span className="inline-flex items-center justify-center h-4 w-4 rounded-full bg-gray-100 text-gray-600 text-[9px] font-bold">M</span>
+          {MODULE_LABELS[module] ?? module} — Dados do Formulário
+        </h3>
+        <Card>
+          <CardContent className="p-3">
+            <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-[11px]">
+              {rows.map((r) => (
+                <div key={r.label} className={r.full ? "col-span-2" : ""}>
+                  <p className="text-[10px] text-muted-foreground">{r.label}</p>
+                  <p className="font-medium text-foreground break-words">{r.value}</p>
+                </div>
+              ))}
+              {typeof data.cargo_photo_path === "string" && data.cargo_photo_path && (
+                <StoragePhoto path={data.cargo_photo_path} alt="Foto da Carga" />
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+  if (module === "M6") {
     const cats = data.categories as string[] | undefined;
     if (cats?.length) rows.push({ label: "Categorias", value: cats.join(" + "), full: true });
     if (data.quantity) rows.push({ label: "Quantidade", value: f(data.quantity) });
