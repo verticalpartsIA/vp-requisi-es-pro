@@ -31,6 +31,28 @@ const STATUS = {
   REPROVADO:             "REPROVADO",
 } as const;
 
+// ─── Cache do list_id do workspace "VP REQUISICOES" ─────────────────────────
+
+let _cachedListId: string | null = null;
+
+async function resolveListId(): Promise<string> {
+  if (_cachedListId) return _cachedListId;
+  try {
+    const workspaces = await vpRest<Array<{ id: string; name: string }>>("workspaces?select=id,name&limit=50");
+    const ws = (workspaces ?? []).find(
+      (w) => w.name?.toUpperCase().replace(/\s/g, "").includes("VPREQUISIC"),
+    );
+    if (ws) {
+      const lists = await vpRest<Array<{ id: string }>>(
+        `lists?select=id&workspace_id=eq.${ws.id}&limit=1`,
+      );
+      const id = lists?.[0]?.id;
+      if (id) { _cachedListId = id; return id; }
+    }
+  } catch { /* fall through */ }
+  return vpclickListId();
+}
+
 // ─── REST helper — vpclick ───────────────────────────────────────────────────
 
 async function vpRest<T>(
@@ -134,6 +156,7 @@ async function createTask(input: {
   assigneeIds: string[];
 }): Promise<string | null> {
   const [main, ...secondary] = input.assigneeIds;
+  const listId = await resolveListId();
   const rows = await vpRest<Array<{ id: string }>>("tasks", {
     method: "POST",
     body: [
@@ -141,7 +164,7 @@ async function createTask(input: {
         title: input.title,
         description: input.description,
         status: input.status,
-        list_id: vpclickListId(),
+        list_id: listId,
         main_assignee_id: main ?? null,
         secondary_assignee_ids: secondary,
         priority: "Média",
@@ -240,10 +263,12 @@ export const notifyVpClickStage = createServerFn({ method: "POST" })
       if (stage === "V1") {
         const assignees = await getAssigneesByRole("comprador");
         const taskId = await createTask({
-          title: `Nova requisição de ${mod} — ${ticketNumber}`,
+          title: `${ticketNumber} — ${title}`,
           description:
-            `**${title}**\n` +
-            `Requisitante: ${requesterName}\n\n` +
+            `**Ticket:** ${ticketNumber}\n` +
+            `**Descrição:** ${title}\n` +
+            `**Módulo:** ${mod}\n` +
+            `**Requisitante:** ${requesterName}\n\n` +
             `🔗 Cotar agora: ${base}/quoting`,
           status: STATUS.PENDENTE,
           assigneeIds: assignees,
@@ -258,10 +283,12 @@ export const notifyVpClickStage = createServerFn({ method: "POST" })
 
         const assignees = await getAssigneesByRole("aprovador");
         const taskId = await createTask({
-          title: `Cotação pronta para aprovação — ${ticketNumber}`,
+          title: `${ticketNumber} — Cotação: ${title}`,
           description:
-            `**${title}**\n` +
-            `Módulo: ${mod}\n\n` +
+            `**Ticket:** ${ticketNumber}\n` +
+            `**Descrição:** ${title}\n` +
+            `**Módulo:** ${mod}\n` +
+            `**Requisitante:** ${requesterName}\n\n` +
             `🔗 Aprovar agora: ${base}/approval`,
           status: STATUS.AGUARDANDO_APROVACAO,
           assigneeIds: assignees,
@@ -276,10 +303,12 @@ export const notifyVpClickStage = createServerFn({ method: "POST" })
 
         const assignees = await getAssigneesByRole("comprador");
         const taskId = await createTask({
-          title: `Requisição aprovada — ${ticketNumber}`,
+          title: `${ticketNumber} — Aprovado: ${title}`,
           description:
-            `**${title}**\n` +
-            `Módulo: ${mod}\n\n` +
+            `**Ticket:** ${ticketNumber}\n` +
+            `**Descrição:** ${title}\n` +
+            `**Módulo:** ${mod}\n` +
+            `**Requisitante:** ${requesterName}\n\n` +
             `🔗 Finalizar compra: ${base}/purchasing`,
           status: STATUS.APROVADO,
           assigneeIds: assignees,
@@ -301,10 +330,12 @@ export const notifyVpClickStage = createServerFn({ method: "POST" })
         if (data.requiresReceipt) {
           const assignees = await getAssigneesByRole("almoxarife");
           const taskId = await createTask({
-            title: `Compra realizada — aguardando recebimento — ${ticketNumber}`,
+            title: `${ticketNumber} — Receber: ${title}`,
             description:
-              `**${title}**\n` +
-              `Módulo: ${mod}\n\n` +
+              `**Ticket:** ${ticketNumber}\n` +
+              `**Descrição:** ${title}\n` +
+              `**Módulo:** ${mod}\n` +
+              `**Requisitante:** ${requesterName}\n\n` +
               `🔗 Registrar recebimento: ${base}/receipt`,
             status: STATUS.EM_PROGRESSO,
             assigneeIds: assignees,

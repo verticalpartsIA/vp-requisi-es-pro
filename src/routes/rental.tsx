@@ -71,7 +71,6 @@ function RentalPage() {
   const [step, setStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const [equipmentName, setEquipmentName] = useState("");
   const [categories, setCategories] = useState<string[]>([]);
   const [specs, setSpecs] = useState("");
   const [quantity, setQuantity] = useState("1");
@@ -89,6 +88,11 @@ function RentalPage() {
   }, [startDate, endDate]);
 
   const isLongRental = rentalDays > LONG_RENTAL_DAYS;
+
+  const categoryLabel = useMemo(
+    () => categories.map((v) => EQUIPMENT_CATEGORIES.find((c) => c.value === v)?.label ?? v).join(' + ') || 'Locação',
+    [categories],
+  );
 
   const loadTickets = async () => {
     if (!session) return;
@@ -116,7 +120,6 @@ function RentalPage() {
       if (!s.open) return;
       setDialogOpen(true);
       if (typeof s.step === 'number') setStep(s.step);
-      if (typeof s.equipmentName === 'string') setEquipmentName(s.equipmentName);
       if (Array.isArray(s.categories)) setCategories(s.categories as string[]);
       else if (typeof s.category === 'string' && s.category) setCategories([s.category as string]);
       if (typeof s.specs === 'string') setSpecs(s.specs);
@@ -135,26 +138,25 @@ function RentalPage() {
     if (!dialogOpen) return;
     try {
       sessionStorage.setItem(DIALOG_KEY, JSON.stringify({
-        open: true, step, equipmentName, categories, specs, quantity,
+        open: true, step, categories, specs, quantity,
         startDate: startDate?.toISOString(),
         endDate: endDate?.toISOString(),
         deliveryLocation, urgencyLevel, justification,
       }));
     } catch { /* ignore */ }
-  }, [dialogOpen, step, equipmentName, categories, specs, quantity,
+  }, [dialogOpen, step, categories, specs, quantity,
       startDate, endDate, deliveryLocation, urgencyLevel, justification]);
 
   const resetForm = () => {
     sessionStorage.removeItem(DIALOG_KEY);
     setStep(0);
-    setEquipmentName(""); setCategories([]); setSpecs(""); setQuantity("1");
+    setCategories([]); setSpecs(""); setQuantity("1");
     setStartDate(undefined); setEndDate(undefined); setDeliveryLocation("");
     setUrgencyLevel(""); setJustification("");
   };
 
   const validateStep = (): boolean => {
     if (step === 0) {
-      if (equipmentName.length < 3) { toast.error("Nome do equipamento deve ter pelo menos 3 caracteres."); return false; }
       if (categories.length === 0) { toast.error("Selecione pelo menos uma categoria."); return false; }
       if (!quantity || parseInt(quantity) <= 0) { toast.error("Quantidade deve ser maior que 0."); return false; }
     }
@@ -184,7 +186,7 @@ function RentalPage() {
         .from("requisitions")
         .insert({
           module: "M6",
-          title: `Locação ${equipmentName} — ${rentalDays} dia(s)`,
+          title: `Locação: ${categoryLabel} — ${rentalDays} dia(s)`,
           description: justification,
           justification,
           urgency: urgencyLevel,
@@ -194,7 +196,6 @@ function RentalPage() {
           requester_department: profile?.department || "Não informado",
           requester_profile_id: user?.id ?? null,
           module_data: {
-            equipment_name: equipmentName,
             categories,
             category: categories[0] ?? "",
             specs,
@@ -224,7 +225,7 @@ function RentalPage() {
         stage: "V1",
         requisitionId: created?.id ?? "",
         ticketNumber: created?.ticket_number ?? "",
-        title: `Locação ${equipmentName} — ${rentalDays} dia(s)`,
+        title: `Locação: ${categoryLabel} — ${rentalDays} dia(s)`,
         module: "M6",
         requesterName: profile?.full_name || user?.email || "Usuário VP",
       }).catch(console.warn);
@@ -289,10 +290,6 @@ function RentalPage() {
 
           {step === 0 && (
             <div className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Nome do Equipamento *</label>
-                <Input placeholder="Ex.: Andaime Tubular 5m x 2m" value={equipmentName} onChange={(e) => setEquipmentName(e.target.value)} maxLength={200} />
-              </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Categoria * (selecione uma ou mais)</label>
                 <div className="grid grid-cols-2 gap-2">

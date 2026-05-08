@@ -48,6 +48,8 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { generateRequisitionPdf } from "@/features/pdf/server";
+import { toast } from "sonner";
 
 /* ── Export types ── */
 
@@ -333,6 +335,7 @@ interface LiveTicketDetail {
     details: Record<string, unknown>;
     created_at: string;
   }>;
+  module_data: Record<string, unknown> | null;
 }
 
 interface SLATarget {
@@ -782,6 +785,85 @@ function mapActionToDescription(action: string, details: Record<string, unknown>
   return base + suppliersCount;
 }
 
+const MODULE_LABELS: Record<string, string> = {
+  M1: "Produto", M2: "Viagem", M3: "Serviço",
+  M4: "Manutenção", M5: "Frete", M6: "Locação",
+};
+
+function ModuleDataSection({ module, data }: { module: string; data: Record<string, unknown> }) {
+  const f = (v: unknown) => (v != null && v !== "" ? String(v) : "—");
+
+  const rows: Array<{ label: string; value: string; full?: boolean }> = [];
+
+  if (module === "M1") {
+    if (data.quantity) rows.push({ label: "Quantidade", value: f(data.quantity) });
+    if (data.delivery_location) rows.push({ label: "Local de Entrega", value: f(data.delivery_location) });
+    if (data.technical_specs) rows.push({ label: "Especificações Técnicas", value: f(data.technical_specs), full: true });
+    if (data.brand_preference) rows.push({ label: "Marca Preferida", value: f(data.brand_preference) });
+    if (data.model_reference) rows.push({ label: "Ref. Modelo", value: f(data.model_reference) });
+    if (data.online_purchase_suggestion) rows.push({ label: "Sugestão Online", value: f(data.online_purchase_suggestion), full: true });
+  } else if (module === "M2") {
+    const travelers = data.travelers as Array<Record<string, unknown>> | undefined;
+    if (travelers?.length) {
+      return (
+        <div className="space-y-2">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+            <span className="inline-flex items-center justify-center h-4 w-4 rounded-full bg-gray-100 text-gray-600 text-[9px] font-bold">M</span>
+            {MODULE_LABELS[module]} — {travelers.length} viajante{travelers.length !== 1 ? "s" : ""}
+          </h3>
+          <div className="space-y-2">
+            {travelers.map((t, i) => (
+              <Card key={i}>
+                <CardContent className="p-3">
+                  <p className="text-xs font-semibold text-foreground">{i + 1}. {f(t.fullName)}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">{f(t.docType)}: {f(t.docNumber)}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      );
+    }
+    if (data.traveler_name) rows.push({ label: "Viajante", value: f(data.traveler_name) });
+  } else if (module === "M5") {
+    if (data.cargo_description) rows.push({ label: "Descrição da Carga", value: f(data.cargo_description), full: true });
+    if (data.unloading_location) rows.push({ label: "Local de Descarregamento", value: f(data.unloading_location), full: true });
+    if (data.cargo_photo_description) rows.push({ label: "Obs. da Foto", value: f(data.cargo_photo_description), full: true });
+  } else if (module === "M6") {
+    const cats = data.categories as string[] | undefined;
+    if (cats?.length) rows.push({ label: "Categorias", value: cats.join(" + "), full: true });
+    if (data.quantity) rows.push({ label: "Quantidade", value: f(data.quantity) });
+    if (data.rental_days) rows.push({ label: "Dias de Locação", value: f(data.rental_days) });
+    if (data.start_date) rows.push({ label: "Início", value: f(data.start_date) });
+    if (data.end_date) rows.push({ label: "Término", value: f(data.end_date) });
+    if (data.delivery_location) rows.push({ label: "Local de Entrega", value: f(data.delivery_location), full: true });
+    if (data.specs) rows.push({ label: "Especificações", value: f(data.specs), full: true });
+  }
+
+  if (!rows.length) return null;
+
+  return (
+    <div className="space-y-2">
+      <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+        <span className="inline-flex items-center justify-center h-4 w-4 rounded-full bg-gray-100 text-gray-600 text-[9px] font-bold">M</span>
+        {MODULE_LABELS[module] ?? module} — Dados do Formulário
+      </h3>
+      <Card>
+        <CardContent className="p-3">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-[11px]">
+            {rows.map((r) => (
+              <div key={r.label} className={r.full ? "col-span-2" : ""}>
+                <p className="text-[10px] text-muted-foreground">{r.label}</p>
+                <p className="font-medium text-foreground break-words">{r.value}</p>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function LogsPage() {
   const { session } = useAuth();
   const [search, setSearch] = useState("");
@@ -844,7 +926,7 @@ function LogsPage() {
       try {
         const { data: req } = await supabaseBrowser
           .from("requisitions")
-          .select("id,ticket_number,module,status,title,description,justification,requester_name,requester_department,created_at,completed_at")
+          .select("id,ticket_number,module,status,title,description,justification,requester_name,requester_department,created_at,completed_at,module_data")
           .eq("ticket_number", selectedTicket)
           .maybeSingle();
 
@@ -922,6 +1004,7 @@ function LogsPage() {
             details: (l.details ?? {}) as Record<string, unknown>,
             created_at: new Date(l.created_at).toLocaleString("pt-BR"),
           })),
+          module_data: (req.module_data ?? null) as Record<string, unknown> | null,
         });
       } finally {
         setDetailLoading(false);
@@ -978,6 +1061,7 @@ function LogsPage() {
           departamento: richDetail.requester_department,
           criado_em: richDetail.created_at,
           concluido_em: richDetail.completed_at,
+          dados_formulario: richDetail.module_data ?? null,
           cotacao: {
             fornecedores: richDetail.suppliers.map((s) => ({
               nome: s.name,
@@ -1063,100 +1147,38 @@ function LogsPage() {
         content = header + rows;
       }
     } else {
-      // PDF → texto formatado rico
-      ext = "txt";
-      mimeType = "text/plain;charset=utf-8";
-      if (richDetail) {
-        const f = (v: string | null | undefined) => v || "—";
-        const sep = "═".repeat(60);
-        const sub = "─".repeat(60);
-        const lines: string[] = [
-          sep,
-          `  HISTÓRICO COMPLETO — ${richDetail.ticket_id}`,
-          `  Exportado em: ${now.toLocaleString("pt-BR")}`,
-          sep,
-          "",
-          "▶ REQUISIÇÃO (V1)",
-          sub,
-          `  Título:        ${richDetail.title}`,
-          `  Descrição:     ${richDetail.description}`,
-          `  Justificativa: ${richDetail.justification}`,
-          `  Requisitante:  ${richDetail.requester_name}`,
-          `  Departamento:  ${f(richDetail.requester_department)}`,
-          `  Módulo:        ${richDetail.module}  |  Status: ${richDetail.status}`,
-          `  Criado em:     ${richDetail.created_at}`,
-          `  Concluído em:  ${f(richDetail.completed_at)}`,
-          "",
-        ];
-
-        if (richDetail.suppliers.length > 0) {
-          lines.push("▶ COTAÇÃO (V2) — FORNECEDORES", sub);
-          richDetail.suppliers.forEach((s, i) => {
-            lines.push(`  [${i + 1}] ${s.name}${s.is_winner ? "  ◀ VENCEDOR" : ""}`);
-            lines.push(`      Preço:    ${fmtPrice(s.price)}`);
-            lines.push(`      Prazo:    ${f(s.deadline)}`);
-            lines.push(`      Proposta: ${s.proposal_received ? "Recebida" : "Pendente"}`);
-            if (s.notes) lines.push(`      Obs.:     ${s.notes}`);
-          });
-          if (richDetail.win_criteria)
-            lines.push(`  Critério de seleção: ${richDetail.win_criteria}`);
-          lines.push("");
-        }
-
-        if (richDetail.approval_decision) {
-          const dec = richDetail.approval_decision === "approved" ? "APROVADO"
-            : richDetail.approval_decision === "rejected" ? "REJEITADO" : "PENDENTE";
-          lines.push("▶ APROVAÇÃO (V3)", sub);
-          lines.push(`  Decisão:       ${dec} (Nível ${richDetail.approval_level ?? "—"})`);
-          lines.push(`  Valor Total:   ${fmtPrice(richDetail.approval_value)}`);
-          lines.push(`  Data Decisão:  ${f(richDetail.approval_decided_at)}`);
-          if (richDetail.approval_justification)
-            lines.push(`  Justificativa: ${richDetail.approval_justification}`);
-          lines.push("");
-        }
-
-        if (richDetail.purchase_supplier) {
-          lines.push("▶ COMPRA (V4)", sub);
-          lines.push(`  Fornecedor:  ${richDetail.purchase_supplier}`);
-          lines.push(`  Valor Pago:  ${fmtPrice(richDetail.purchase_price)}`);
-          lines.push(`  Nº Pedido:   ${f(richDetail.purchase_order_number)}`);
-          lines.push(`  Pagamento:   ${f(richDetail.payment_method)}`);
-          lines.push(`  Data Compra: ${f(richDetail.purchased_at)}`);
-          lines.push("");
-        }
-
-        if (richDetail.receipt_condition) {
-          const cond = richDetail.receipt_condition === "ok" ? "OK — Conforme"
-            : richDetail.receipt_condition === "damaged" ? "Danificado" : "Divergente";
-          lines.push("▶ RECEBIMENTO (V5)", sub);
-          lines.push(`  Condição:    ${cond}`);
-          lines.push(`  Entregador:  ${f(richDetail.deliverer_name)}`);
-          lines.push(`  Data Receb.: ${f(richDetail.received_at)}`);
-          if (richDetail.receipt_notes) lines.push(`  Obs.:        ${richDetail.receipt_notes}`);
-          lines.push("");
-        }
-
-        if (richDetail.ticket_audit_logs.length > 0) {
-          lines.push("▶ HISTÓRICO DE AÇÕES", sub);
-          richDetail.ticket_audit_logs.forEach((l) => {
-            lines.push(`  [${l.created_at}] ${l.action.replace(/_/g, " ")} — ${l.actor_name ?? "Sistema"}`);
-          });
-          lines.push("");
-        }
-
-        lines.push(sep);
-        content = lines.join("\n");
-      } else {
-        const lines = [
-          `HISTÓRICO DE AUDITORIA — ${exportTicketId}`,
-          `Exportado em: ${now.toLocaleString("pt-BR")}`,
-          "─".repeat(60),
-          ...ticketEntries.map((e) =>
-            `[${e.created_at}] ${e.module_stage} | ${e.action_description} | ${e.user_name}`
-          ),
-        ];
-        content = lines.join("\n");
+      // PDF real via reportgen.io
+      if (!richDetail) {
+        toast.error("Abra os detalhes de um ticket antes de exportar PDF.");
+        setExportLoading(false);
+        return;
       }
+      try {
+        const result = await generateRequisitionPdf({
+          data: { detail: JSON.stringify(richDetail) },
+        });
+        const binary = atob(result.base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const blob = new Blob([bytes], { type: "application/pdf" });
+        const blobUrl = URL.createObjectURL(blob);
+        const filename = `vpreq-${exportTicketId}-${now.toISOString().slice(0, 10)}.pdf`;
+        const anchor = document.createElement("a");
+        anchor.href = blobUrl;
+        anchor.download = filename;
+        anchor.click();
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 30_000);
+        setExportResult({
+          download_url: blobUrl,
+          expires_at: new Date(now.getTime() + 30 * 60 * 1000).toISOString(),
+          file_size_bytes: blob.size,
+          generated_at: now.toISOString(),
+        });
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Erro ao gerar PDF");
+      }
+      setExportLoading(false);
+      return;
     }
 
     const blob = new Blob(["﻿" + content], { type: mimeType });
@@ -1823,6 +1845,11 @@ function LogsPage() {
                     </CardContent>
                   </Card>
                 </div>
+
+                {/* Module Data */}
+                {liveDetail.module_data && Object.keys(liveDetail.module_data).length > 0 && (
+                  <ModuleDataSection module={liveDetail.module} data={liveDetail.module_data} />
+                )}
 
                 {/* V2 — Cotação */}
                 {liveDetail.suppliers.length > 0 && (
